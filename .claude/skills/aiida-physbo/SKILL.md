@@ -1,9 +1,9 @@
 ---
 name: aiida-physbo
-description: "PHYSBO のベイズ最適化を AiiDA の provenance に記録する aiida-physbo を使う・直すときに使う。2 種類の探索空間（候補表 CandidatesData = discrete policy、連続の箱 SearchBoxData = range policy）、ObservationsData の連鎖、calcfunction propose / observe の約束、PhysboOptimizeWorkChain、CLI `physbo-aiida --json` と MCP `physbo-mcp`（ツール physbo_*）、対話ループ（ask–tell）の回し方、事後と獲得関数の取り出し方と図、PHYSBO 3.2.1 の既知の制限（ODAT-SE mapper、range の複数点 + BLM、少数観測でのハイパーパラメータ崩れ）。"
+description: "PHYSBO のベイズ最適化を AiiDA の provenance に記録する aiida-physbo を使う・直すときに使う。2 種類の探索空間（候補表 CandidatesData = discrete policy、連続の箱 SearchBoxData = range policy）、ObservationsData の連鎖、calcfunction propose / observe の約束、PhysboOptimizeWorkChain、CLI `physbo-aiida --json` と MCP `physbo-mcp`（ツール physbo_*）、対話ループ（ask–tell）の回し方、事後と獲得関数の取り出し方と図（posterior / plot）、テスト関数（PHYSBO 同梱 + Branin / Hartmann / Levy / Forrester / DTLZ2 など、既知の最小値と regret、観測ノイズ、log 変換）、ベンチマークの教訓（スケール、獲得関数の最適化器、少数観測）、PHYSBO 3.2.1 の既知の制限と fork 側の修正（ODAT-SE 4 の mapper、range の複数点 + BLM）。"
 ---
 
-# Skill: aiida-physbo（PHYSBO を AiiDA から使う）v1.0.0
+# Skill: aiida-physbo（PHYSBO を AiiDA から使う）v1.1.0
 
 このスキルはリポジトリに同梱する公開用です。特定の計算機、アカウント、パスに依る情報は書きません（各自の環境のメモに置く）。詳細は `README.md`、`docs/design.md`、`docs/mcp.md`、`examples/README.md` から辿ります。
 
@@ -49,7 +49,14 @@ physbo-aiida submit-optimize --test-function Sphere --space range --num-random 1
 physbo-aiida results --pk <workchain pk>
 ```
 
-テスト関数は PHYSBO 同梱のもの（Sphere、Rastrigin、Ackley、ZDT、…）に加え、プラグインの `extra_functions.py`（Branin、GoldsteinPrice、SixHumpCamel、Levy、Hartmann3 / 6、Forrester、GramacyLee、DTLZ2）。`test-functions` が既知の最小値を返し、`results` が regret を出す。`--noise σ` で観測ノイズを足せる。`examples/benchmark.py` が一式を回して表と図にする。
+テスト関数は PHYSBO 同梱のもの（Sphere、Rastrigin、Ackley、ZDT、…）に加え、プラグインの `extra_functions.py`（Branin、GoldsteinPrice、SixHumpCamel、Levy、Hartmann3 / 6、Forrester、GramacyLee、DTLZ2）。`test-functions` が既知の最小値を返し、`results` が regret を出す。`--noise σ` で観測ノイズ、`--transform log` で log f を記録（f > 0。値域が桁で広がる関数に）。`examples/benchmark.py` が一式を回して表と図にする（結果は `examples/README.md`）。
+
+## 実際の問題に持ち込む判断（ベンチマークから）
+
+- **スケールが最大の敵**。O(1) の値域の多峰関数（Levy、Hartmann3）は 40 評価で解けるが、3〜10⁶ に広がる Goldstein–Price は素の GP では台地に合ってしまう。観測を log（`--transform log`、対話モードなら log f を `observe`）にすると discrete で regret 57 → 4.7。
+- **range では獲得関数の最適化器が効く**。6 次元 Hartmann6 では一様サンプル 5000 点が ODAT-SE exchange 300 歩に勝った。次元に応じて `optimizer_nsamples` を増やす（GP の予測はベクトル化されていて安い）。minsearch は EI の平らな領域で止まることがある。
+- **少数観測（3〜6 点）でのハイパーパラメータ崩れ**は、予算が小さいかノイズがあるときに効く。乱数点を 5〜10 以上にするか、`num_rand_basis` の BLM を使う。
+- 1 seed の比較で結論を出さない（Goldstein–Price の range は log の有無で順位が揺れた）。
 
 獲得関数: 単目的 TS（既定）/ EI / PI、多目的 TS / EHVI / HVPI（値は `--values '[[f1,f2],...]'` の行で渡す）。`num_rand_basis` は 0 で厳密 GP、数百でランダム特徴の BLM（候補が数千以上なら）。
 
@@ -74,8 +81,9 @@ physbo-aiida results --pk <workchain pk>
 
 ## PHYSBO 3.2.1 の既知の制限と挙動（プラグインが先に止めるもの）
 
-- ODAT-SE 4 と組むと `mapper` が落ちる（`ColorMap.txt` の先頭行 `fval` を PHYSBO が読み飛ばさない）→ 選択肢から除外。
-- range で `num_search_each_probe > 1` かつ `num_rand_basis > 0` は `Variable.add` の形状エラー → 事前に拒否。
+- ODAT-SE 4 と組むと `mapper` が落ちる。原因は 2 つ: PHYSBO の `default_alg_dict` が `num_list` などを numpy 配列で渡し、ODAT-SE 4 の `MeshIterator` の `[1] + num_list` が要素和になってメッシュが対角線に潰れる（11×11 のつもりが 11 点）こと、および `ColorMap.txt` の見出し行 `#x1 x2 fval` を `float()` に渡すこと → プラグインでは選択肢から除外。PHYSBO 側の修正は fork の branch `fix/odatse-mapper-header`（list 化 + `result["x"]` を優先 + 見出しを飛ばす reader）。
+- range で `num_search_each_probe > 1` かつ `num_rand_basis > 0` は `Variable.add` の「X と Z の数が違う」で落ちる（仮想学習点に基底 Z を付けていない）→ 事前に拒否。PHYSBO 側の修正は fork の branch `fix/range-multi-probe-blm`（`predictor.get_basis` の Z を `add` に渡す。range_multi も）。
+- 修正済みの PHYSBO を入れたら、プラグインのこの 2 つの事前拒否は外してよい（`calcfunctions.ODATSE_ALGORITHMS` と `run_propose` の range 分岐、`steps.submit_optimize` の同じ検査）。
 - ODAT-SE は作業ディレクトリに `odatse_output/` を書く → プラグインは一時ディレクトリで走らせて消す。
 - ODAT-SE の初期点は seed で決まる。propose の `seed` を渡さないと `minsearch` が毎手同じ点を提案し得る（0.3.0 から seed を引き渡す）。
 - ベンチマーク（`examples/README.md` の表）: Levy / Hartmann3 は 40 評価で解けるが、値が 3〜10⁶ に広がる Goldstein–Price は素の GP では解けない。`--transform log`（objective の `transform: "log"`）で log f を記録すると discrete では regret 57 → 4.7（range は 1 seed では結論が出ない）。6 次元では獲得関数の最大化に一様サンプル 5000 点のほうが ODAT-SE exchange 300 歩より効いた。ノイズ付きや周期の細かい関数は乱数点を 5〜10 以上に増やす。
@@ -98,3 +106,4 @@ physbo-aiida results --pk <workchain pk>
 
 - 目的関数が AiiDA のプロセス（CalcJob）であるループ。対話モードで代替する（propose → 投入 → observe）。
 - 3 次元以上の箱での事後の格子（`posterior` は dim ≤ 2）。
+- 連続空間の制約（PHYSBO のテスト関数の `constraint` は候補表を作るときにだけ使える）。
