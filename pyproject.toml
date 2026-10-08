@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aiida-physbo"
-version = "0.1.0"
+version = "0.2.0"
 description = "AiiDA plugin, CLI and MCP server for Bayesian optimization with PHYSBO"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -18,11 +18,13 @@ dependencies = [
 
 [project.entry-points."aiida.data"]
 "physbo.candidates" = "aiida_physbo.data:CandidatesData"
+"physbo.search_box" = "aiida_physbo.data:SearchBoxData"
 "physbo.observations" = "aiida_physbo.data:ObservationsData"
 
 [project.entry-points."aiida.calculations"]
 "physbo.candidates_from_file" = "aiida_physbo.calcfunctions:candidates_from_file"
 "physbo.candidates_from_grid" = "aiida_physbo.calcfunctions:candidates_from_grid"
+"physbo.search_box" = "aiida_physbo.calcfunctions:search_box"
 "physbo.observe" = "aiida_physbo.calcfunctions:observe"
 "physbo.propose" = "aiida_physbo.calcfunctions:propose"
 "physbo.evaluate_test_function" = "aiida_physbo.calcfunctions:evaluate_test_function"

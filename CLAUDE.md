@@ -32,12 +32,15 @@ reconnect the server in the MCP client (`/mcp` → aiida-physbo → reconnect).
 
 ## Architecture in one paragraph
 
-`CandidatesData` (array `X`) and `ObservationsData` (arrays `actions`, `t` always (M, k)) are typed
-ArrayData nodes (`data.py`). `calcfunctions.propose(candidates, parameters, observations=None)` is
-stateless: it rebuilds a `physbo.search.discrete[_multi].Policy` with `initial_data`, calls
-`bayes_search(max_num_probes=1, simulator=None)` (or `random_search` when nothing is observed) and
-returns `proposal` (actions, X), `summary`, optional `posterior`. `observe` appends to the chain and
-rejects duplicate actions. `PhysboOptimizeWorkChain` (`workflows/optimize.py`, entry point
+`CandidatesData` (array `X`; discrete space), `SearchBoxData` (arrays `min_X`, `max_X`; continuous
+range space) and `ObservationsData` (arrays `t` always (M, k), `X` (M, d), and `actions` for a discrete
+space; attribute `space`) are typed ArrayData nodes (`data.py`). `calcfunctions.propose(space,
+parameters, observations=None)` is stateless: it rebuilds a `physbo.search.{discrete,range}[_multi].Policy`
+with `initial_data`, calls `bayes_search(max_num_probes=1, simulator=None)` (or `random_search` when
+nothing is observed) and returns `proposal` (X, and actions for discrete), `summary`, optional
+`posterior`. For a range space the acquisition is maximized by `physbo.search.optimize.random` or
+`.odatse` (run in a scratch cwd). `observe` appends to the chain and rejects duplicate actions
+(discrete only). `PhysboOptimizeWorkChain` (`workflows/optimize.py`, entry point
 `physbo.optimize`) loops propose → `evaluate_test_function` → observe on a PHYSBO test function
 (`objectives.py`; test functions are minimized, so it stores f and sets `maximize=False`). `query/nodes.py`
 holds every read; `cli/steps.py` validates before creating nodes and logs to `~/.aiida-physbo/log/`.
@@ -51,4 +54,7 @@ holds every read; `cli/steps.py` validates before creating nodes and logs to `~/
 - Value options are passed as `--flag=value` (a value such as `-4.0,-8.0` is otherwise read as a flag).
 - `propose` parameter keys live only in `PROPOSE_DEFAULTS`; the CLI builds them through
   `steps._propose_parameters`.
-- Bump `__version__` in `aiida_physbo/__init__.py` and `pyproject.toml` together.
+- Bump `__version__` in `aiida_physbo/__init__.py` and `pyproject.toml` together, and add a row to the
+  README "Versions" table.
+- Known PHYSBO 3.2.1 limits (checked before running, keep the checks): ODAT-SE `mapper` is excluded; a
+  range space cannot propose several points per step with `num_rand_basis > 0`.

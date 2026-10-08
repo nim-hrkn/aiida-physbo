@@ -21,8 +21,23 @@ def plot_cli(pk, outdir=None, prefix=None, minimize=False):
     os.makedirs(outdir, exist_ok=True)
     prefix = prefix or (obs.label or f"physbo_{obs.pk}")
     t = obs.t
+    X = obs.X
     steps = np.arange(1, t.shape[0] + 1)
     files = []
+    if X is not None and X.shape[1] == 2 and t.shape[1] == 1:
+        fig, ax = plt.subplots(figsize=(5.5, 5))
+        sc = ax.scatter(X[:, 0], X[:, 1], c=t[:, 0], cmap="viridis", s=30)
+        for i, (x, y) in enumerate(X):
+            ax.annotate(str(i + 1), (x, y), fontsize=7, xytext=(2, 2), textcoords="offset points")
+        fig.colorbar(sc, ax=ax, label="t")
+        ax.set_xlabel("x[0]")
+        ax.set_ylabel("x[1]")
+        ax.set_title(f"observed points {obs.pk} (numbers: observation order)")
+        path = os.path.join(outdir, f"{prefix}_points.png")
+        fig.tight_layout()
+        fig.savefig(path, dpi=120)
+        plt.close(fig)
+        files.append(path)
     if t.shape[1] == 1:
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.plot(steps, t[:, 0], "o", ms=4, alpha=0.6, label="observed")
@@ -53,4 +68,4 @@ def plot_cli(pk, outdir=None, prefix=None, minimize=False):
         fig.savefig(path, dpi=120)
         plt.close(fig)
         files.append(path)
-    return {"pk": obs.pk, "files": files, "num_observations": int(t.shape[0]), "num_objectives": int(t.shape[1])}
+    return {"pk": obs.pk, "space": obs.space, "files": files, "num_observations": int(t.shape[0]), "num_objectives": int(t.shape[1])}

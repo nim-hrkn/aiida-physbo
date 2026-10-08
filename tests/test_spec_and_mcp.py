@@ -75,7 +75,7 @@ def test_dict_arguments_are_passed_as_json(monkeypatch):
     monkeypatch.setenv("PHYSBO_AIIDA_BIN", "/x/physbo-aiida")
     argv = server.build_argv("candidates", {"grid": {"min": [0], "max": [1], "num": 5}})
     assert argv[-1] == "--grid=" + json.dumps({"min": [0], "max": [1], "num": 5})
-    argv = server.build_argv("observe", {"candidates_pk": 3, "actions": "1,2", "values": [[0.1, 0.2], [0.3, 0.4]]})
+    argv = server.build_argv("observe", {"space_pk": 3, "actions": "1,2", "values": [[0.1, 0.2], [0.3, 0.4]]})
     assert "--values=[[0.1, 0.2], [0.3, 0.4]]" in argv
 
 
@@ -84,15 +84,15 @@ def test_negative_values_are_not_options():
     from aiida_physbo.cli.main import build_parser, join_negative_values
     from aiida_physbo.mcp import server
 
-    argv = ["--json", "observe", "--candidates-pk", "3", "--actions", "1,2", "--values", "-4.0,-8.0", "--label", "-x"]
+    argv = ["--json", "observe", "--space-pk", "3", "--actions", "1,2", "--values", "-4.0,-8.0", "--label", "-x"]
     joined = join_negative_values(argv)
     assert "--values=-4.0,-8.0" in joined and "--label=-x" in joined
     args = build_parser().parse_args(joined)
-    assert args.values == "-4.0,-8.0" and args.label == "-x" and args.candidates_pk == 3
+    assert args.values == "-4.0,-8.0" and args.label == "-x" and args.space_pk == 3
     # a real flag after a value option is left alone
-    assert join_negative_values(["propose", "--candidates-pk", "3", "--minimize"]) == ["propose", "--candidates-pk", "3", "--minimize"]
+    assert join_negative_values(["propose", "--space-pk", "3", "--minimize"]) == ["propose", "--space-pk", "3", "--minimize"]
     # the MCP side never produces the two-token form
-    argv = server.build_argv("observe", {"candidates_pk": 3, "actions": "1", "values": "-4.0"})
+    argv = server.build_argv("observe", {"space_pk": 3, "actions": "1", "values": "-4.0"})
     assert "--values=-4.0" in argv
 
 
@@ -118,8 +118,8 @@ def test_cli_parser_builds_and_json_failure_is_json():
     from aiida_physbo.cli.main import build_parser
 
     parser = build_parser()
-    args = parser.parse_args(["--json", "propose", "--candidates-pk", "5", "--minimize", "--score", "EI"])
-    assert args.command == "propose" and args.candidates_pk == 5 and args.minimize and args.score == "EI"
+    args = parser.parse_args(["--json", "propose", "--space-pk", "5", "--minimize", "--score", "EI"])
+    assert args.command == "propose" and args.space_pk == 5 and args.minimize and args.score == "EI"
     proc = subprocess.run([sys.executable, "-m", "aiida_physbo.cli.main", "--json", "--profile", "no-such-profile", "status"],
                           capture_output=True, text=True)
     assert proc.returncode == 1
@@ -151,3 +151,17 @@ def test_mcp_server_builds_with_mcp_2():
     tools = asyncio.run(srv.list_tools())
     names = {t.name for t in tools}
     assert names == set(server.TOOLS), names - set(server.TOOLS)
+
+
+def test_values_and_coordinates_row_parsing():
+    """`--values -0.9,-4.6` is M single-objective rows; `--x 0.3,-1.2` is one point (2026-10-08, range smoke test)."""
+    from aiida_physbo.cli.steps import _parse_values, _rows
+
+    assert _parse_values("-0.9,-4.6,1.0").shape == (3, 1)
+    assert _parse_values("0.1,2.0;0.3,1.5").tolist() == [[0.1, 2.0], [0.3, 1.5]]
+    assert _parse_values("[[0.1, 2.0], [0.3, 1.5]]").shape == (2, 2)
+    assert _parse_values([[1.0, 2.0]]).shape == (1, 2)
+    assert _rows("0.3,-1.2", "--x").tolist() == [[0.3, -1.2]]
+    assert _rows("0.3,-1.2;1.1,0.4", "--x").shape == (2, 2)
+    assert _rows([[0.3, -1.2], [1.1, 0.4]], "--x").shape == (2, 2)
+    assert _rows("[[0.3,-1.2]]", "--x").shape == (1, 2)

@@ -8,7 +8,7 @@ import time
 import numpy as np
 
 OPTIMIZE_LABEL = "PhysboOptimizeWorkChain"
-CALCFUNCTION_LABELS = ("candidates_from_file", "candidates_from_grid", "observe", "propose",
+CALCFUNCTION_LABELS = ("candidates_from_file", "candidates_from_grid", "search_box", "observe", "propose",
                        "evaluate_test_function", "summarize")
 PROCESS_LABELS = CALCFUNCTION_LABELS + (OPTIMIZE_LABEL,)
 
@@ -63,19 +63,21 @@ def status():
 
     import physbo
 
+    from .. import __version__
     from ..cli.control import daemon_status
-    from ..data import CandidatesData, ObservationsData
+    from ..data import CandidatesData, ObservationsData, SearchBoxData
 
     profile = get_manager().get_profile()
     info = {"profile": profile.name, "storage_backend": profile.storage_backend,
             "broker_backend": profile.process_control_backend, "aiida_version": aiida_version,
-            "physbo_version": physbo.__version__}
+            "physbo_version": physbo.__version__, "aiida_physbo_version": __version__}
     try:
         info["daemon"] = daemon_status()
     except Exception as exc:  # noqa: BLE001
         info["daemon"] = {"error": str(exc)}
     info["counts"] = {
         "candidates": orm.QueryBuilder().append(CandidatesData).count(),
+        "search_boxes": orm.QueryBuilder().append(SearchBoxData).count(),
         "observations": orm.QueryBuilder().append(ObservationsData).count(),
         "optimize_workchains": orm.QueryBuilder().append(
             orm.WorkChainNode, filters={"attributes.process_label": OPTIMIZE_LABEL}).count(),
@@ -147,23 +149,35 @@ def wait(pk, wait_seconds=None):
 
 
 # ---------------------------------------------------------------- data
-def candidates_info(pk, head=None):
-    from ..data import CandidatesData
+def _space_input(process):
+    """the space node (link `space`, or `candidates` in 0.1.0 graphs) of a process, or None."""
+    ins = input_nodes(process)
+    return ins.get("space") or ins.get("candidates")
+
+
+def space_info(pk, head=None):
+    """shape / box, feature names and (discrete) the first rows of a CandidatesData or SearchBoxData."""
+    from ..data import CandidatesData, SearchBoxData
 
     node = _node(pk)
-    if not isinstance(node, CandidatesData):
-        raise ValueError(f"Node<{node.pk}> is a {node.__class__.__name__}, not CandidatesData")
-    X = node.X
-    head_rows, _ = _rows(X, int(head or 5))
-    info = {"pk": node.pk, "label": node.label, "num_candidates": node.num_candidates, "dim": node.dim,
-            "columns": node.columns, "min": X.min(axis=0).tolist(), "max": X.max(axis=0).tolist(),
-            "head": head_rows, "creator": _creator(node)}
+    if isinstance(node, CandidatesData):
+        X = node.X
+        head_rows, _ = _rows(X, int(head or 5))
+        info = {"pk": node.pk, "label": node.label, "space": "discrete", "num_candidates": node.num_candidates,
+                "dim": node.dim, "columns": node.columns, "min": X.min(axis=0).tolist(), "max": X.max(axis=0).tolist(),
+                "head": head_rows}
+    elif isinstance(node, SearchBoxData):
+        info = {"pk": node.pk, "label": node.label, "space": "range", "dim": node.dim, "columns": node.columns,
+                "min": node.min_X.tolist(), "max": node.max_X.tolist()}
+    else:
+        raise ValueError(f"Node<{node.pk}> is a {node.__class__.__name__}, not CandidatesData or SearchBoxData")
+    info["creator"] = _creator(node)
     if node.creator is not None:
         ins = input_nodes(node.creator)
         if "source" in ins:
             info["source_file"] = ins["source"].filename
         if "spec" in ins:
-            info["grid_spec"] = ins["spec"].get_dict()
+            info["spec"] = ins["spec"].get_dict()
     return info
 
 
@@ -196,7 +210,7 @@ def _chain(obs):
         ins = input_nodes(creator)
         new = ins.get("new")
         chain.append({"process_pk": creator.pk, "observations_pk": node.pk,
-                      "num_new": int(new.get_array("actions").shape[0]) if new is not None else None,
+                      "num_new": int(new.get_array("t").shape[0]) if new is not None else None,
                       "new_from": _creator(new) if new is not None else None})
         node = ins.get("observations")
     return list(reversed(chain))
@@ -209,23 +223,20 @@ def history(pk, minimize=False, max_rows=None):
     node = _node(pk)
     obs = _observations_of(node)
     maximize = not minimize
-    actions, t = obs.actions, obs.t
+    actions, X, t = obs.actions, obs.X, obs.t
+    space = _space_input(obs.creator) if obs.creator is not None else None
+    if X is None and actions is not None and space is not None:          # 0.1.0 node
+        X = space.X[actions]
     cap = int(max_rows or 500)
-    a_rows, truncated = _rows(actions, cap)
-    t_rows, _ = _rows(t, cap)
-    d = {"pk": obs.pk, "label": obs.label, "num_observations": obs.num_observations,
-         "num_objectives": obs.num_objectives, "maximize": maximize,
-         "actions": a_rows, "t": t_rows, "truncated": truncated,
-         "best": best_of(actions, t, maximize), "best_sequence": best_sequence(t, maximize)[:cap],
+    t_rows, truncated = _rows(t, cap)
+    d = {"pk": obs.pk, "label": obs.label, "space": obs.space, "num_observations": obs.num_observations,
+         "num_objectives": obs.num_objectives, "dim": int(X.shape[1]) if X is not None else None, "maximize": maximize,
+         "actions": _rows(actions, cap)[0] if actions is not None else None,
+         "X": _rows(X, cap)[0] if X is not None else None, "t": t_rows, "truncated": truncated,
+         "best": best_of(t, maximize, actions=actions, X=X), "best_sequence": best_sequence(t, maximize)[:cap],
          "chain": _chain(obs)}
-    creator = obs.creator
-    if creator is not None:
-        ins = input_nodes(creator)
-        if "candidates" in ins:
-            cand = ins["candidates"]
-            d["candidates_pk"] = cand.pk
-            if "best_action" in d["best"]:
-                d["best"]["best_X"] = cand.X[d["best"]["best_action"]].tolist()
+    if space is not None:
+        d["space_pk"] = space.pk
     return d
 
 
@@ -243,17 +254,20 @@ def proposal(pk):
     else:
         prop, proc = node, node.creator
         outs = output_nodes(proc) if proc is not None else {}
+    names = set(prop.get_arraynames())
     d = {"pk": prop.pk, "process_pk": proc.pk if proc is not None else None,
-         "actions": prop.get_array("actions").tolist(), "X": prop.get_array("X").tolist()}
+         "actions": prop.get_array("actions").tolist() if "actions" in names else None, "X": prop.get_array("X").tolist()}
     if "summary" in outs:
         d["summary"] = outs["summary"].get_dict()
     if "posterior" in outs:
         post = outs["posterior"]
         fmean, fstd = post.get_array("fmean"), post.get_array("fstd")
         d["posterior"] = {"pk": post.pk, "shape": list(fmean.shape),
-                          "fmean_at_proposal": fmean[d["actions"]].tolist(), "fstd_at_proposal": fstd[d["actions"]].tolist(),
                           "fmean_argmax": int(np.argmax(fmean[:, 0])), "fmean_max": float(fmean[:, 0].max()),
                           "fstd_max": float(fstd.max())}
+        if d["actions"] is not None:
+            d["posterior"]["fmean_at_proposal"] = fmean[d["actions"]].tolist()
+            d["posterior"]["fstd_at_proposal"] = fstd[d["actions"]].tolist()
     if proc is not None:
         ins = input_nodes(proc)
         d["inputs"] = {k: v.pk for k, v in ins.items()}

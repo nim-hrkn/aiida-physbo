@@ -5,8 +5,9 @@
     random phase:  one `propose` (random, num_random points) -> one `evaluate_test_function` -> `observe`
     bayes phase:   num_bayes times: `propose` (score) -> `evaluate_test_function` -> `observe`
 
-Every step is a calcfunction node called by this WorkChain, so the campaign is one provenance graph:
-candidates -> proposal -> evaluation -> observations -> next proposal -> ...
+The space is a CandidatesData (discrete policies) or a SearchBoxData (range policies). Every step is a
+calcfunction node called by this WorkChain, so the campaign is one provenance graph:
+space -> proposal -> evaluation -> observations -> next proposal -> ...
 The objective is a PHYSBO test function (objectives.py); an external objective (an experiment or a
 CalcJob) is driven instead with the `propose` / `observe` CLI tools (interactive mode).
 """
@@ -14,21 +15,22 @@ from aiida import orm
 from aiida.engine import WorkChain, while_
 
 from .. import objectives
-from ..calcfunctions import PROPOSE_DEFAULTS, evaluate_test_function, observe, propose, summarize
-from ..data import CandidatesData, ObservationsData
+from ..calcfunctions import PROPOSE_DEFAULTS, RANGE_ONLY, evaluate_test_function, observe, propose, summarize
+from ..data import DISCRETE, CandidatesData, ObservationsData, SearchBoxData, space_of
 
 
 class PhysboOptimizeWorkChain(WorkChain):
-    """Bayesian optimization of a PHYSBO test function on a discrete candidate set."""
+    """Bayesian optimization of a PHYSBO test function on a discrete candidate set or a continuous box."""
 
     @classmethod
     def define(cls, spec):
         super().define(spec)
-        spec.input("candidates", valid_type=CandidatesData, help="the search space (rows of X)")
+        spec.input("space", valid_type=(CandidatesData, SearchBoxData),
+                   help="the search space: CandidatesData (discrete) or SearchBoxData (range)")
         spec.input("objective", valid_type=orm.Dict,
                    help='{"name": <test function>, "kwargs": {...}, "maximize": false}; see objectives.py')
         spec.input("parameters", valid_type=orm.Dict, default=lambda: orm.Dict(dict={}),
-                   help="propose parameters (score, num_rand_basis, num_search_each_probe, seed, ...); "
+                   help="propose parameters (score, num_rand_basis, num_search_each_probe, seed, optimizer, ...); "
                         "num_objectives and maximize are set from the objective")
         spec.input("num_random", valid_type=orm.Int, default=lambda: orm.Int(10),
                    help="random evaluations before the Bayesian steps (0 to skip; then `observations` is required)")
@@ -43,6 +45,7 @@ class PhysboOptimizeWorkChain(WorkChain):
 
         spec.exit_code(400, "ERROR_STEP_FAILED", message="a propose / evaluate / observe step raised")
         spec.exit_code(410, "ERROR_BAD_OBJECTIVE", message="the objective spec is not a known PHYSBO test function")
+        spec.exit_code(411, "ERROR_BAD_PARAMETERS", message="the propose parameters are not valid for this space")
         spec.exit_code(420, "ERROR_NO_CANDIDATES_LEFT", message="every candidate has been observed")
         spec.exit_code(421, "ERROR_NOTHING_TO_START_FROM", message="num_random is 0 and no observations were given")
 
@@ -54,20 +57,27 @@ class PhysboOptimizeWorkChain(WorkChain):
         except Exception as exc:  # noqa: BLE001
             self.report(f"bad objective {spec!r}: {exc}")
             return self.exit_codes.ERROR_BAD_OBJECTIVE
-        if fn.dim != self.inputs.candidates.dim:
-            self.report(f"objective dimension {fn.dim} != candidates dimension {self.inputs.candidates.dim}")
+        space = self.inputs.space
+        if fn.dim != space.dim:
+            self.report(f"objective dimension {fn.dim} != space dimension {space.dim}")
             return self.exit_codes.ERROR_BAD_OBJECTIVE
         params = dict(self.inputs.parameters.get_dict())
         unknown = set(params) - set(PROPOSE_DEFAULTS)
         if unknown:
             self.report(f"unknown propose parameters {sorted(unknown)}")
-            return self.exit_codes.ERROR_BAD_OBJECTIVE
+            return self.exit_codes.ERROR_BAD_PARAMETERS
+        if space_of(space) == DISCRETE and any(k in params for k in RANGE_ONLY):
+            self.report(f"{[k for k in RANGE_ONLY if k in params]} apply to a range space only")
+            return self.exit_codes.ERROR_BAD_PARAMETERS
         params["num_objectives"] = fn.nobj
         params["maximize"] = bool(spec.get("maximize", False))
         params.pop("random", None)
         self.ctx.params = params
         self.ctx.seed = params.get("seed")
         self.ctx.observations = self.inputs.observations if "observations" in self.inputs else None
+        if self.ctx.observations is not None and self.ctx.observations.space != space_of(space):
+            self.report("the given observations belong to a different kind of space")
+            return self.exit_codes.ERROR_BAD_PARAMETERS
         self.ctx.step = 0
         self.ctx.num_bayes = self.inputs.num_bayes.value
         if self.inputs.num_random.value <= 0 and self.ctx.observations is None:
@@ -82,15 +92,16 @@ class PhysboOptimizeWorkChain(WorkChain):
     def _one_step(self, params: orm.Dict):
         """propose -> evaluate -> observe; returns the summary dict or an exit code."""
         label = self.inputs.label.value
-        kwargs = {"candidates": self.inputs.candidates, "parameters": params}
+        kwargs = {"space": self.inputs.space, "parameters": params}
         if self.ctx.observations is not None:
             kwargs["observations"] = self.ctx.observations
         try:
-            out = propose(**kwargs, metadata={"label": f"{label}_propose_{self.ctx.step}", "call_link_label": f"propose_{self.ctx.step}"})
-            evaluated = evaluate_test_function(self.inputs.candidates, out["proposal"], self.inputs.objective,
+            out = propose(**kwargs, metadata={"label": f"{label}_propose_{self.ctx.step}",
+                                              "call_link_label": f"propose_{self.ctx.step}"})
+            evaluated = evaluate_test_function(self.inputs.space, out["proposal"], self.inputs.objective,
                                                metadata={"label": f"{label}_evaluate_{self.ctx.step}",
                                                          "call_link_label": f"evaluate_{self.ctx.step}"})
-            okw = {"candidates": self.inputs.candidates, "new": evaluated}
+            okw = {"space": self.inputs.space, "new": evaluated}
             if self.ctx.observations is not None:
                 okw["observations"] = self.ctx.observations
             self.ctx.observations = observe(**okw, metadata={"label": f"{label}_observe_{self.ctx.step}",
@@ -105,8 +116,8 @@ class PhysboOptimizeWorkChain(WorkChain):
             self.report(f"step {self.ctx.step} failed: {type(exc).__name__}: {exc}")
             return self.exit_codes.ERROR_STEP_FAILED
         summary = out["summary"].get_dict()
-        self.report(f"step {self.ctx.step} ({summary['mode']}): actions {summary['proposed_actions']}, "
-                    f"best so far {summary['best_so_far']}")
+        where = summary["proposed_actions"] if summary["proposed_actions"] is not None else summary["proposed_X"]
+        self.report(f"step {self.ctx.step} ({summary['mode']}): {where}, best so far {summary['best_so_far']}")
         self.ctx.step += 1
         return summary
 
@@ -132,7 +143,7 @@ class PhysboOptimizeWorkChain(WorkChain):
         settings = {"objective": self.inputs.objective.get_dict(), "maximize": bool(self.ctx.params["maximize"]),
                     "steps": self.ctx.step, "num_random": self.inputs.num_random.value,
                     "num_bayes": self.inputs.num_bayes.value, "parameters": self.ctx.params}
-        summary = summarize(self.inputs.candidates, obs, orm.Dict(dict=settings),
+        summary = summarize(self.inputs.space, obs, orm.Dict(dict=settings),
                             metadata={"label": f"{self.inputs.label.value}_summary", "call_link_label": "summarize"})
         self.out("observations", obs)
         self.out("summary", summary)

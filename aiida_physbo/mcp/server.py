@@ -27,9 +27,9 @@ TIMEOUT = 55
 TOOLS = {
     "physbo_status": "status", "physbo_daemon_status": "daemon-status", "physbo_test_functions": "test-functions",
     "physbo_process": "process", "physbo_list": "list", "physbo_wait": "wait",
-    "physbo_candidates_info": "candidates-info", "physbo_history": "history", "physbo_proposal": "proposal",
+    "physbo_space_info": "space-info", "physbo_history": "history", "physbo_proposal": "proposal",
     "physbo_results": "results", "physbo_plot": "plot", "physbo_provenance": "provenance",
-    "physbo_candidates": "candidates", "physbo_observe": "observe", "physbo_propose": "propose",
+    "physbo_candidates": "candidates", "physbo_search_box": "search-box", "physbo_observe": "observe", "physbo_propose": "propose",
     "physbo_submit_optimize": "submit-optimize",
     "physbo_daemon_start": "daemon-start", "physbo_daemon_stop": "daemon-stop", "physbo_kill": "kill",
 }
@@ -130,21 +130,23 @@ def physbo_wait(pk: int, wait_seconds: int | None = None) -> dict:
     return run("wait", pk=pk, wait_seconds=wait_seconds)
 
 
-def physbo_candidates_info(pk: int, head: int | None = None) -> dict:
-    """Shape, feature names, per-feature min/max and the first rows of a CandidatesData node."""
-    return run("candidates-info", pk=pk, head=head)
+def physbo_space_info(pk: int, head: int | None = None) -> dict:
+    """A search space node: CandidatesData (discrete: shape, feature names, per-feature min/max, first rows) or SearchBoxData
+    (range: the box min/max)."""
+    return run("space-info", pk=pk, head=head)
 
 
 def physbo_history(pk: int, minimize: bool = False, max_rows: int | None = None) -> dict:
-    """All observations of a campaign in order (actions and values), the best-so-far sequence or the Pareto front, and the
-    chain of observe steps. `pk` is an ObservationsData, an optimize WorkChain, or a propose/observe process.
-    minimize=true evaluates "best" as the smallest value."""
+    """All observations of a campaign in order (actions for a discrete space, coordinates X, and values t), the best-so-far
+    sequence or the Pareto front, and the chain of observe steps. `pk` is an ObservationsData, an optimize WorkChain, or a
+    propose/observe process. minimize=true evaluates "best" as the smallest value."""
     return run("history", pk=pk, minimize=minimize, max_rows=max_rows)
 
 
 def physbo_proposal(pk: int) -> dict:
-    """Actions and feature rows X of a proposal (pk of the proposal ArrayData or of its propose process), the summary
-    (mode, score, best so far) and, when stored, the posterior mean/std at the proposed points."""
+    """The proposed points (actions = candidate indices for a discrete space, and coordinates X) of a proposal (pk of the
+    proposal ArrayData or of its propose process), the summary (mode, score, best so far, posterior mean/std at the proposed
+    points) and, when stored, the full posterior node."""
     return run("proposal", pk=pk)
 
 
@@ -170,51 +172,73 @@ def physbo_candidates(file: str | None = None, format: str | None = None, delimi
                       skip_header: int | None = None, columns: str | None = None, grid: str | dict | None = None,
                       test_function: str | None = None, kwargs: str | dict | None = None, num: int | None = None,
                       names: str | None = None, label: str | None = None) -> dict:
-    """Store the candidate set (the discrete search space, one row per candidate) as a CandidatesData node and return its pk.
-    Give exactly one of: `file` (csv/tsv/npy/npz path on this machine; `columns` picks csv columns, `skip_header` skips lines),
-    `grid` ({"min": [...], "max": [...], "num": int or [...]} regular grid), or `test_function` (grid over the default box of a
-    PHYSBO test function, `num` points per dimension). `names` are comma separated feature names."""
+    """Store a DISCRETE search space (the candidate table, one row per candidate; proposals are row indices) as a
+    CandidatesData node and return its pk. Give exactly one of: `file` (csv/tsv/npy/npz path on this machine; `columns` picks
+    csv columns, `skip_header` skips lines), `grid` ({"min": [...], "max": [...], "num": int or [...]} regular grid), or
+    `test_function` (grid over the default box of a PHYSBO test function, `num` points per dimension). `names` are comma
+    separated feature names. For a continuous space use physbo_search_box instead."""
     return run("candidates", file=file, format=format, delimiter=delimiter, skip_header=skip_header, columns=columns,
                grid=grid, test_function=test_function, kwargs=kwargs, num=num, names=names, label=label)
 
 
-def physbo_observe(candidates_pk: int, observations_pk: int | None = None, actions: str | None = None,
-                   values: str | list | None = None, file: str | None = None, label: str | None = None) -> dict:
-    """Record measured objective values for candidates: `actions` are comma separated candidate indices (e.g. "3,17"),
-    `values` the corresponding values ("0.12,0.07" for one objective, or a JSON array of rows [[f1,f2],...] for several);
-    or `file` = csv with the action in the first column. Pass the previous `observations_pk` to append to a campaign
-    (omit it to start one). Returns the new ObservationsData pk, which the next physbo_propose takes."""
-    return run("observe", candidates_pk=candidates_pk, observations_pk=observations_pk, actions=actions, values=values,
+def physbo_search_box(min: str | None = None, max: str | None = None, test_function: str | None = None,
+                      kwargs: str | dict | None = None, names: str | None = None, label: str | None = None) -> dict:
+    """Store a CONTINUOUS search space (a box; PHYSBO range policies propose coordinates inside it, not indices) as a
+    SearchBoxData node and return its pk. Give `min` and `max` as comma separated bounds per dimension (e.g. "-2,-2" and
+    "2,2"), or `test_function` to take the default box of a PHYSBO test function. `names` are comma separated feature names."""
+    return run("search-box", min=min, max=max, test_function=test_function, kwargs=kwargs, names=names, label=label)
+
+
+def physbo_observe(space_pk: int, observations_pk: int | None = None, actions: str | None = None,
+                   x: str | list | None = None, values: str | list | None = None, file: str | None = None,
+                   label: str | None = None) -> dict:
+    """Record measured objective values. Discrete space (CandidatesData): `actions` = comma separated candidate indices
+    (e.g. "3,17"). Range space (SearchBoxData): `x` = the measured coordinates as JSON rows [[x1,x2],...] or "x1,x2;x1,x2".
+    `values` = the corresponding values ("0.12,0.07" for one objective, or JSON rows [[f1,f2],...] for several); or `file` =
+    csv (discrete: action then values per row; range: the d coordinates then values). Pass the previous `observations_pk` to
+    append to a campaign (omit it to start one). Returns the new ObservationsData pk, which the next physbo_propose takes."""
+    return run("observe", space_pk=space_pk, observations_pk=observations_pk, actions=actions, x=x, values=values,
                file=file, label=label)
 
 
-def physbo_propose(candidates_pk: int, observations_pk: int | None = None, score: str | None = None,
+def physbo_propose(space_pk: int, observations_pk: int | None = None, score: str | None = None,
                    num_rand_basis: int | None = None, num_search_each_probe: int | None = None, seed: int | None = None,
                    num_objectives: int | None = None, minimize: bool = False, random: bool = False, posterior: bool = False,
-                   interval: int | None = None, label: str | None = None) -> dict:
-    """PHYSBO proposes the next candidates to evaluate from the observations so far (random when observations_pk is omitted
-    or random=true). score: TS (default) | EI | PI for one objective, TS | EHVI | HVPI for several; num_rand_basis 0 = exact
-    Gaussian process (use ~500 for thousands of candidates); num_search_each_probe = how many to propose; minimize=true if
-    the recorded values are to be minimized. Returns the proposed actions, their X rows, the proposal pk and a summary with
-    the best so far. Runs synchronously (seconds) and is recorded as a calcfunction."""
-    return run("propose", candidates_pk=candidates_pk, observations_pk=observations_pk, score=score,
+                   interval: int | None = None, optimizer: str | None = None, optimizer_nsamples: int | None = None,
+                   odatse_algorithm: str | None = None, odatse_params: str | dict | None = None,
+                   label: str | None = None) -> dict:
+    """PHYSBO proposes the next points to evaluate from the observations so far (random when observations_pk is omitted or
+    random=true). The space is a CandidatesData (discrete: proposals are candidate indices + their rows X) or a SearchBoxData
+    (range: proposals are coordinates X found by maximizing the acquisition with `optimizer` random (uniform samples,
+    `optimizer_nsamples`) or odatse (`odatse_algorithm` exchange | pamc | minsearch | bayes, `odatse_params` JSON overrides)).
+    score: TS (default) | EI | PI for one objective, TS | EHVI | HVPI for several; num_rand_basis 0 = exact Gaussian process
+    (use ~500 for thousands of candidates); num_search_each_probe = how many points; minimize=true if the recorded values are
+    to be minimized. Returns the proposal pk, actions / X, and a summary with the best so far and the posterior at the
+    proposed points. Runs synchronously (seconds) and is recorded as a calcfunction."""
+    return run("propose", space_pk=space_pk, observations_pk=observations_pk, score=score,
                num_rand_basis=num_rand_basis, num_search_each_probe=num_search_each_probe, seed=seed,
                num_objectives=num_objectives, minimize=minimize, random=random, posterior=posterior, interval=interval,
-               label=label)
+               optimizer=optimizer, optimizer_nsamples=optimizer_nsamples, odatse_algorithm=odatse_algorithm,
+               odatse_params=odatse_params, label=label)
 
 
 def physbo_submit_optimize(test_function: str, kwargs: str | dict | None = None, maximize: bool = False,
-                           candidates_pk: int | None = None, num: int | None = None, observations_pk: int | None = None,
-                           num_random: int | None = None, num_bayes: int | None = None, score: str | None = None,
-                           num_rand_basis: int | None = None, num_search_each_probe: int | None = None,
-                           seed: int | None = None, label: str | None = None) -> dict:
+                           space_pk: int | None = None, space: str | None = None, num: int | None = None,
+                           observations_pk: int | None = None, num_random: int | None = None, num_bayes: int | None = None,
+                           score: str | None = None, num_rand_basis: int | None = None, num_search_each_probe: int | None = None,
+                           seed: int | None = None, optimizer: str | None = None, optimizer_nsamples: int | None = None,
+                           odatse_algorithm: str | None = None, odatse_params: str | dict | None = None,
+                           label: str | None = None) -> dict:
     """Submit a closed-loop Bayesian optimization WorkChain to the AiiDA daemon on a PHYSBO test function (see
     physbo_test_functions): num_random random evaluations, then num_bayes Bayesian steps of propose -> evaluate -> observe.
-    Candidates default to a grid of `num` points per dimension over the function's box. The function is minimized unless
-    maximize=true. Returns the WorkChain pk; poll with physbo_wait / physbo_process, read with physbo_results."""
-    return run("submit-optimize", test_function=test_function, kwargs=kwargs, maximize=maximize, candidates_pk=candidates_pk,
+    The space is `space_pk` (CandidatesData or SearchBoxData) or is built from the function's box: space="discrete" (default,
+    a grid of `num` points per dimension) or space="range" (the box itself, with optimizer / odatse options as in
+    physbo_propose). The function is minimized unless maximize=true. Returns the WorkChain pk; poll with physbo_wait /
+    physbo_process, read with physbo_results."""
+    return run("submit-optimize", test_function=test_function, kwargs=kwargs, maximize=maximize, space_pk=space_pk, space=space,
                num=num, observations_pk=observations_pk, num_random=num_random, num_bayes=num_bayes, score=score,
-               num_rand_basis=num_rand_basis, num_search_each_probe=num_search_each_probe, seed=seed, label=label)
+               num_rand_basis=num_rand_basis, num_search_each_probe=num_search_each_probe, seed=seed, optimizer=optimizer,
+               optimizer_nsamples=optimizer_nsamples, odatse_algorithm=odatse_algorithm, odatse_params=odatse_params, label=label)
 
 
 # ---------------------------------------------------------------- tools (CONTROL)
@@ -256,9 +280,11 @@ def build_server(allow_submit: bool = False, allow_control: bool = False):
         flags.append("control")
     server = MCPServer(
         name=SERVER_NAME, version=__version__,
-        instructions="Bayesian optimization with PHYSBO, recorded in AiiDA. Interactive loop: physbo_candidates (store X) -> "
-                     "physbo_propose (next actions) -> evaluate outside -> physbo_observe (record values, returns a new "
-                     "observations pk) -> physbo_propose with that pk -> ... physbo_history shows the campaign. "
+        instructions="Bayesian optimization with PHYSBO, recorded in AiiDA. Two kinds of search space: a discrete candidate "
+                     "table (physbo_candidates; proposals are row indices) or a continuous box (physbo_search_box; proposals "
+                     "are coordinates). Interactive loop: store the space -> physbo_propose (next points) -> evaluate outside "
+                     "-> physbo_observe (record values, returns a new observations pk) -> physbo_propose with that pk -> ... "
+                     "physbo_history shows the campaign. "
                      "physbo_submit_optimize runs a closed loop on a PHYSBO test function in the daemon (returns a pk; poll "
                      "with physbo_wait / physbo_results). Read-only tools are always available"
                      + (f"; enabled write tools: {', '.join(flags)}" if flags else "; no write tools enabled") + ".")
