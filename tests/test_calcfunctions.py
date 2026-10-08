@@ -274,3 +274,65 @@ def test_evaluate_test_function_and_objectives(grid, box):
     obs = observe(box, ev)
     s = summarize(box, obs, orm.Dict(dict={"maximize": False})).get_dict()
     assert s["space"] == "range" and s["best"]["best_value"] == pytest.approx(float(obs.t.min())) and "best_X" in s["best"]
+
+
+# ------------------------------------------------------------------ posterior on a grid (range) and the posterior query
+def test_posterior_grid_range_and_query(aiida_profile_clean):
+    from aiida import orm
+
+    from aiida_physbo.calcfunctions import observe, propose, search_box
+    from aiida_physbo.query.nodes import posterior
+
+    box = search_box(orm.Dict(dict={"min": [0.0], "max": [1.0]}))
+    X0 = np.array([[0.1], [0.5], [0.9]])
+    obs = observe(box, _new(X=X0, t=(6 * X0[:, 0] - 2) ** 2 * np.sin(12 * X0[:, 0] - 4)))
+    out = propose(box, orm.Dict(dict={"seed": 1, "score": "EI", "maximize": False, "posterior": True, "posterior_num": 51,
+                                      "optimizer_nsamples": 200}), obs)
+    post = out["posterior"]
+    assert set(post.get_arraynames()) == {"X", "fmean", "fstd", "score"}
+    assert post.get_array("X").shape == (51, 1) and post.get_array("fmean").shape == (51, 1) and post.get_array("score").shape == (51,)
+    assert out["summary"].get_dict()["posterior_points"] == 51
+    d = posterior(out["proposal"].creator.pk, max_points=20)
+    assert d["dim"] == 1 and d["num_points"] == 51 and d["thinned_to"] == 20 and len(d["X"]) == 20
+    assert d["observations"]["pk"] == obs.pk and len(d["observations"]["t"]) == 3
+    assert d["proposal"]["X"] == out["proposal"].get_array("X").tolist() and d["proposal"]["actions"] is None
+    assert d["summary"]["score"] == "EI" and d["summary"]["maximize"] is False
+    assert posterior(post.pk)["pk"] == post.pk                      # the posterior node itself is accepted
+    with pytest.raises(ValueError, match="stored no posterior"):
+        out2 = propose(box, orm.Dict(dict={"seed": 1, "optimizer_nsamples": 50}), obs)
+        posterior(out2["proposal"].pk)
+    box3 = search_box(orm.Dict(dict={"min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 1.0]}))
+    obs3 = observe(box3, _new(X=[[0.5, 0.5, 0.5], [0.1, 0.2, 0.3]], t=[1.0, 2.0]))
+    with pytest.raises(ValueError, match="dimension 1 or 2"):
+        propose(box3, orm.Dict(dict={"posterior": True, "optimizer_nsamples": 50}), obs3)
+
+
+def test_posterior_discrete_has_X_and_score(grid):
+    from aiida import orm
+
+    from aiida_physbo.calcfunctions import observe, propose
+    from aiida_physbo.plot import plot_cli
+
+    obs = observe(grid, _new(actions=[0, 60, 120], t=[1.0, 3.0, 2.0]))
+    out = propose(grid, orm.Dict(dict={"seed": 1, "score": "PI", "posterior": True}), obs)
+    post = out["posterior"]
+    assert post.get_array("X").shape == (121, 2) and post.get_array("score").shape == (121,)
+    # the 2-D space is drawn as observed points, not as a posterior curve
+    pytest.importorskip("matplotlib")
+    files = plot_cli(out["proposal"].creator.pk, outdir=str(__import__("tempfile").mkdtemp()))["files"]
+    assert any(f.endswith("_points.png") for f in files)
+
+
+def test_plot_posterior_1d(aiida_profile_clean, tmp_path):
+    from aiida import orm
+
+    pytest.importorskip("matplotlib")
+    from aiida_physbo.calcfunctions import candidates_from_grid, observe, propose
+    from aiida_physbo.plot import plot_cli
+
+    cand = candidates_from_grid(orm.Dict(dict={"min": [0.0], "max": [1.0], "num": 41}))
+    obs = observe(cand, _new(actions=[0, 20, 40], t=[1.0, -2.0, 0.5]))
+    out = propose(cand, orm.Dict(dict={"seed": 1, "score": "EI", "maximize": False, "posterior": True}), obs)
+    r = plot_cli(out["proposal"].creator.pk, outdir=str(tmp_path), minimize=True)
+    assert len(r["files"]) == 1 and r["files"][0].endswith("_posterior.png") and (tmp_path / r["files"][0].split("/")[-1]).exists()
+    assert r["num_observations"] == 3 and r["proposed_X"] == out["proposal"].get_array("X").tolist()

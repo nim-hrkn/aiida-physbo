@@ -38,7 +38,8 @@ space; attribute `space`) are typed ArrayData nodes (`data.py`). `calcfunctions.
 parameters, observations=None)` is stateless: it rebuilds a `physbo.search.{discrete,range}[_multi].Policy`
 with `initial_data`, calls `bayes_search(max_num_probes=1, simulator=None)` (or `random_search` when
 nothing is observed) and returns `proposal` (X, and actions for discrete), `summary`, optional
-`posterior`. For a range space the acquisition is maximized by `physbo.search.optimize.random` or
+`posterior` (X, fmean, fstd, score on the candidates or on a grid over a 1-D/2-D box; read with the
+`posterior` command, drawn by `plot` for 1-D). For a range space the acquisition is maximized by `physbo.search.optimize.random` or
 `.odatse` (run in a scratch cwd). `observe` appends to the chain and rejects duplicate actions
 (discrete only). `PhysboOptimizeWorkChain` (`workflows/optimize.py`, entry point
 `physbo.optimize`) loops propose → `evaluate_test_function` → observe on a PHYSBO test function

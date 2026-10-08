@@ -16,6 +16,12 @@ def plot_cli(pk, outdir=None, prefix=None, minimize=False):
     from .query.nodes import _node, _observations_of
 
     node = _node(pk)
+    try:
+        step = _posterior_step(node)          # a propose step run with posterior=true
+    except ValueError:
+        step = None
+    if step is not None and step["dim"] == 1:
+        return _plot_posterior_1d(step, outdir, prefix, minimize)
     obs = _observations_of(node)
     outdir = outdir or os.path.join(os.path.expanduser("~"), "aiida_work", "figures", str(obs.pk))
     os.makedirs(outdir, exist_ok=True)
@@ -69,3 +75,70 @@ def plot_cli(pk, outdir=None, prefix=None, minimize=False):
         plt.close(fig)
         files.append(path)
     return {"pk": obs.pk, "space": obs.space, "files": files, "num_observations": int(t.shape[0]), "num_objectives": int(t.shape[1])}
+
+
+def _posterior_step(node):
+    from .query.nodes import posterior
+
+    return posterior(node.pk, max_points=100000)
+
+
+def _plot_posterior_1d(step, outdir=None, prefix=None, minimize=False):
+    """one propose step on a 1-D space: posterior mean and 2-sigma band, observations, proposal, acquisition."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    pk = step["process_pk"]
+    outdir = outdir or os.path.join(os.path.expanduser("~"), "aiida_work", "figures", str(pk))
+    os.makedirs(outdir, exist_ok=True)
+    prefix = prefix or f"propose_{pk}"
+    X = np.asarray(step["X"])[:, 0]
+    order = np.argsort(X)
+    X = X[order]
+    fmean = np.asarray(step["fmean"])[order]
+    fstd = np.asarray(step["fstd"])[order]
+    k = fmean.shape[1]
+    nrows = k + (1 if step.get("score") is not None else 0)
+    fig, axes = plt.subplots(nrows, 1, figsize=(7, 2.6 * nrows + 0.6), sharex=True, squeeze=False)
+    axes = axes[:, 0]
+    obs = step.get("observations")
+    prop = step.get("proposal", {})
+    for j in range(k):
+        ax = axes[j]
+        ax.fill_between(X, fmean[:, j] - 2 * fstd[:, j], fmean[:, j] + 2 * fstd[:, j], color="tab:blue", alpha=0.15,
+                        label="posterior mean ± 2σ")
+        ax.plot(X, fmean[:, j], color="tab:blue", lw=1.5)
+        if obs and obs.get("X") is not None:
+            xo = np.asarray(obs["X"])[:, 0]
+            to = np.asarray(obs["t"])[:, j]
+            ax.plot(xo, to, "ko", ms=5, label=f"observed ({len(xo)})")
+            for i, (x, t) in enumerate(zip(xo, to)):
+                ax.annotate(str(i + 1), (x, t), fontsize=7, xytext=(3, 3), textcoords="offset points")
+        for xp in np.asarray(prop.get("X", []))[:, 0] if prop.get("X") else []:
+            ax.axvline(xp, color="tab:red", ls="--", lw=1.2, label="proposed")
+        ax.set_ylabel("t" if k == 1 else f"t[{j}]")
+        handles, labels = ax.get_legend_handles_labels()
+        seen = {}
+        for h, l in zip(handles, labels):
+            seen.setdefault(l, h)
+        ax.legend(seen.values(), seen.keys(), loc="best", fontsize=8)
+    summ = step.get("summary") or {}
+    axes[0].set_title(f"propose {pk}: {summ.get('score')} after {summ.get('num_observed')} observations"
+                      f" ({'minimize' if minimize or summ.get('maximize') is False else 'maximize'})")
+    if step.get("score") is not None:
+        ax = axes[-1]
+        sc = np.asarray(step["score"])[order]
+        ax.plot(X, sc, color="tab:green", lw=1.5)
+        ax.fill_between(X, np.min(sc), sc, color="tab:green", alpha=0.15)
+        for xp in np.asarray(prop.get("X", []))[:, 0] if prop.get("X") else []:
+            ax.axvline(xp, color="tab:red", ls="--", lw=1.2)
+        ax.set_ylabel(f"acquisition ({summ.get('score')})")
+    axes[-1].set_xlabel("x")
+    path = os.path.join(outdir, f"{prefix}_posterior.png")
+    fig.tight_layout()
+    fig.savefig(path, dpi=120)
+    plt.close(fig)
+    return {"pk": pk, "space": summ.get("space"), "files": [path], "num_observations": summ.get("num_observed"),
+            "proposed_X": prop.get("X")}

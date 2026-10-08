@@ -28,7 +28,7 @@ TOOLS = {
     "physbo_status": "status", "physbo_daemon_status": "daemon-status", "physbo_test_functions": "test-functions",
     "physbo_process": "process", "physbo_list": "list", "physbo_wait": "wait",
     "physbo_space_info": "space-info", "physbo_history": "history", "physbo_proposal": "proposal",
-    "physbo_results": "results", "physbo_plot": "plot", "physbo_provenance": "provenance",
+    "physbo_posterior": "posterior", "physbo_results": "results", "physbo_plot": "plot", "physbo_provenance": "provenance",
     "physbo_candidates": "candidates", "physbo_search_box": "search-box", "physbo_observe": "observe", "physbo_propose": "propose",
     "physbo_submit_optimize": "submit-optimize",
     "physbo_daemon_start": "daemon-start", "physbo_daemon_stop": "daemon-stop", "physbo_kill": "kill",
@@ -150,6 +150,13 @@ def physbo_proposal(pk: int) -> dict:
     return run("proposal", pk=pk)
 
 
+def physbo_posterior(pk: int, max_points: int | None = None) -> dict:
+    """The data of a figure of one propose step that was run with posterior=true: X (candidates, or a grid over a 1-D/2-D
+    box), posterior mean and std in the stored sign, the acquisition score, the observations the step saw and the proposed
+    points. `pk` is the propose process, its proposal or its posterior node; arrays are thinned to max_points (default 1001)."""
+    return run("posterior", pk=pk, max_points=max_points)
+
+
 def physbo_results(pk: int) -> dict:
     """Summary of an optimize WorkChain (best value / Pareto front, best X, best-so-far sequence, observations pk, steps done)
     or of a propose / observe process."""
@@ -157,7 +164,9 @@ def physbo_results(pk: int) -> dict:
 
 
 def physbo_plot(pk: int, minimize: bool = False, outdir: str | None = None, prefix: str | None = None) -> dict:
-    """Write a PNG: best-so-far vs observation (one objective) or observed points with the Pareto front (several). Returns the paths."""
+    """Write PNGs: best-so-far vs observation, observed points (2-D), Pareto front (several objectives); for a propose step
+    run with posterior=true on a 1-D space, also the posterior mean / band with the acquisition and the proposed point.
+    Returns the paths."""
     return run("plot", pk=pk, minimize=minimize, outdir=outdir, prefix=prefix)
 
 
@@ -204,20 +213,23 @@ def physbo_observe(space_pk: int, observations_pk: int | None = None, actions: s
 def physbo_propose(space_pk: int, observations_pk: int | None = None, score: str | None = None,
                    num_rand_basis: int | None = None, num_search_each_probe: int | None = None, seed: int | None = None,
                    num_objectives: int | None = None, minimize: bool = False, random: bool = False, posterior: bool = False,
-                   interval: int | None = None, optimizer: str | None = None, optimizer_nsamples: int | None = None,
-                   odatse_algorithm: str | None = None, odatse_params: str | dict | None = None,
-                   label: str | None = None) -> dict:
+                   posterior_num: int | None = None, interval: int | None = None, optimizer: str | None = None,
+                   optimizer_nsamples: int | None = None, odatse_algorithm: str | None = None,
+                   odatse_params: str | dict | None = None, label: str | None = None) -> dict:
     """PHYSBO proposes the next points to evaluate from the observations so far (random when observations_pk is omitted or
     random=true). The space is a CandidatesData (discrete: proposals are candidate indices + their rows X) or a SearchBoxData
     (range: proposals are coordinates X found by maximizing the acquisition with `optimizer` random (uniform samples,
     `optimizer_nsamples`) or odatse (`odatse_algorithm` exchange | pamc | minsearch | bayes, `odatse_params` JSON overrides)).
     score: TS (default) | EI | PI for one objective, TS | EHVI | HVPI for several; num_rand_basis 0 = exact Gaussian process
     (use ~500 for thousands of candidates); num_search_each_probe = how many points; minimize=true if the recorded values are
-    to be minimized. Returns the proposal pk, actions / X, and a summary with the best so far and the posterior at the
-    proposed points. Runs synchronously (seconds) and is recorded as a calcfunction."""
+    to be minimized. posterior=true also stores mean / std / acquisition on every candidate or on a grid of posterior_num
+    points per dimension over a 1-D / 2-D box (read with physbo_posterior, draw with physbo_plot). Returns the proposal pk,
+    actions / X, and a summary with the best so far and the posterior at the proposed points. Runs synchronously (seconds)
+    and is recorded as a calcfunction."""
     return run("propose", space_pk=space_pk, observations_pk=observations_pk, score=score,
                num_rand_basis=num_rand_basis, num_search_each_probe=num_search_each_probe, seed=seed,
-               num_objectives=num_objectives, minimize=minimize, random=random, posterior=posterior, interval=interval,
+               num_objectives=num_objectives, minimize=minimize, random=random, posterior=posterior,
+               posterior_num=posterior_num, interval=interval,
                optimizer=optimizer, optimizer_nsamples=optimizer_nsamples, odatse_algorithm=odatse_algorithm,
                odatse_params=odatse_params, label=label)
 

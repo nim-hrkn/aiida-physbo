@@ -262,7 +262,7 @@ def proposal(pk):
     if "posterior" in outs:
         post = outs["posterior"]
         fmean, fstd = post.get_array("fmean"), post.get_array("fstd")
-        d["posterior"] = {"pk": post.pk, "shape": list(fmean.shape),
+        d["posterior"] = {"pk": post.pk, "shape": list(fmean.shape), "on_grid": "X" in post.get_arraynames(),
                           "fmean_argmax": int(np.argmax(fmean[:, 0])), "fmean_max": float(fmean[:, 0].max()),
                           "fstd_max": float(fstd.max())}
         if d["actions"] is not None:
@@ -273,6 +273,60 @@ def proposal(pk):
         d["inputs"] = {k: v.pk for k, v in ins.items()}
         if "observations" not in ins:
             d["note"] = "no observations were given: the proposal is random"
+    return d
+
+
+def _posterior_of(node):
+    """(propose process, posterior ArrayData) meant by a pk: a propose process, its proposal or its posterior node."""
+    from aiida import orm
+
+    if isinstance(node, orm.ProcessNode):
+        proc = node
+    else:
+        proc = node.creator
+    if proc is None or proc.process_label != "propose":
+        raise ValueError(f"Node<{node.pk}> is not a propose process or one of its outputs")
+    outs = output_nodes(proc)
+    if "posterior" not in outs:
+        raise ValueError(f"propose<{proc.pk}> stored no posterior; call propose with posterior=true")
+    return proc, outs["posterior"]
+
+
+def _thin(n, max_points):
+    if max_points is None or n <= max_points:
+        return np.arange(n)
+    return np.unique(np.linspace(0, n - 1, int(max_points)).astype(int))
+
+
+def posterior(pk, max_points=None):
+    """posterior mean / std and the acquisition on the candidates (discrete) or the grid (range) of a propose step,
+    with the observations it saw and the proposed points: everything needed to draw the step."""
+    node = _node(pk)
+    proc, post = _posterior_of(node)
+    names = set(post.get_arraynames())
+    outs = output_nodes(proc)
+    ins = input_nodes(proc)
+    Xg = post.get_array("X") if "X" in names else None
+    if Xg is None:                                     # 0.2.0 node: candidates only
+        space = _space_input(proc)
+        Xg = space.X
+    idx = _thin(Xg.shape[0], max_points or 1001)
+    d = {"pk": post.pk, "process_pk": proc.pk, "dim": int(Xg.shape[1]), "num_points": int(Xg.shape[0]),
+         "thinned_to": int(idx.size), "X": Xg[idx].tolist(), "fmean": post.get_array("fmean")[idx].tolist(),
+         "fstd": post.get_array("fstd")[idx].tolist(),
+         "score": post.get_array("score")[idx].tolist() if "score" in names else None}
+    if "summary" in outs:
+        summ = outs["summary"].get_dict()
+        d["summary"] = {k: summ.get(k) for k in ("space", "mode", "score", "maximize", "num_observed", "proposed_actions", "proposed_X")}
+    prop = outs.get("proposal")
+    if prop is not None:
+        d["proposal"] = {"X": prop.get_array("X").tolist(),
+                         "actions": prop.get_array("actions").tolist() if "actions" in prop.get_arraynames() else None}
+    obs = ins.get("observations")
+    if obs is not None:
+        space = _space_input(proc)
+        Xo = obs.X if obs.X is not None else (space.X[obs.actions] if obs.actions is not None else None)
+        d["observations"] = {"pk": obs.pk, "X": Xo.tolist() if Xo is not None else None, "t": obs.t.tolist()}
     return d
 
 

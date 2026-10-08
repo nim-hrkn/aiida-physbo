@@ -22,7 +22,7 @@
 |---|---|---|
 | physbo_status, physbo_daemon_status, physbo_test_functions | status, daemon-status, test-functions | read |
 | physbo_process, physbo_list, physbo_wait | process, list, wait | read |
-| physbo_space_info, physbo_history, physbo_proposal, physbo_results | space-info, history, proposal, results | read |
+| physbo_space_info, physbo_history, physbo_proposal, physbo_posterior, physbo_results | space-info, history, proposal, posterior, results | read |
 | physbo_plot, physbo_provenance | plot, provenance | read |
 | physbo_candidates, physbo_search_box, physbo_observe, physbo_propose, physbo_submit_optimize | candidates, search-box, observe, propose, submit-optimize | submit |
 | physbo_daemon_start, physbo_daemon_stop, physbo_kill | daemon-start, daemon-stop, kill | control |

@@ -33,8 +33,8 @@ scratch directory that is removed afterwards (`_in_tempdir`); the daemon's cwd i
 | search box | `SearchBoxData(ArrayData)`, `physbo.search_box` | `min_X`, `max_X` (d,); attribute `columns` |
 | observations | `ObservationsData(ArrayData)`, `physbo.observations` | `t` (M, k) float, `X` (M, d), `actions` (M,) int (discrete only); attribute `space`. 0.1.0 nodes have `actions`, `t` only |
 | proposal | `ArrayData` | `X` (n, d) and, discrete, `actions` (n,) |
+| posterior | `ArrayData` (optional) | `X`, `fmean`, `fstd` (N, k), `score` (N,) on the candidates or a grid |
 | summary | `Dict` | mode, score, best so far, timings, physbo version |
-| posterior | `ArrayData` (optional) | `fmean`, `fstd` (N, k) on every candidate |
 
 `t` is always 2-D, like `physbo.Variable.t` (PHYSBO calls the objective value `t`; it is the usual "y").
 Values are stored **raw**; the sign convention is a
@@ -62,8 +62,12 @@ problems, so the WorkChain stores `f` and runs `propose` with `maximize=False`.
   (`TS/EI/PI` for one, `TS/EHVI/HVPI` for several).
 - every candidate observed (discrete) → `ValueError("every candidate has been observed already")`
   (exit 420 in the WorkChain).
-- the summary always carries `posterior_at_proposal` (mean / std at the proposed points); the full
-  `posterior` node over every candidate exists for a discrete space with `posterior: true`.
+- the summary always carries `posterior_at_proposal` (mean / std at the proposed points). With
+  `posterior: true` a `posterior` ArrayData is stored with `X`, `fmean`, `fstd` (stored sign) and the
+  acquisition `score`, on every candidate (discrete) or on a grid of `posterior_num` points per dimension
+  (range, dim ≤ 2). `physbo-aiida posterior --pk` returns it thinned; `plot --pk <propose pk>` draws a
+  1-D step. The ODAT-SE seed follows the propose `seed` (otherwise every step would start from the same
+  point and `minsearch` could repeat one proposal).
 - `observe` rejects actions outside `[0, N)`, duplicates (an action is a candidate; measuring it twice
   is a different experiment design), and a change of the number of objectives.
 

@@ -8,7 +8,8 @@
     observe(space, new, observations=None)       append (actions | X, t) -> new ObservationsData
     propose(space, parameters, observations=None)
                                                  PHYSBO policy on the observations -> proposal (actions, X | X),
-                                                 summary Dict, optional posterior (discrete: fmean/fstd on every candidate)
+                                                 summary Dict, optional posterior (X, fmean, fstd, score on every
+                                                 candidate, or on a grid over a 1-D / 2-D box)
     evaluate_test_function(space, proposal, objective)
                                                  PHYSBO test function on the proposed rows -> ArrayData (actions?, X, t)
     summarize(space, observations, settings)     best / Pareto front / best-so-far sequence -> Dict
@@ -46,7 +47,9 @@ PROPOSE_DEFAULTS = {
     "maximize": True,              # False: the stored t is minimized (propose sees -t)
     "random": False,               # True: random proposals (also used automatically when nothing is observed yet)
     "interval": 0,                 # hyperparameter learning interval passed to bayes_search (0: learn once)
-    "posterior": False,            # discrete: also return fmean / fstd on every candidate (costly for large N)
+    "posterior": False,            # also return fmean / fstd (and the acquisition) on every candidate (discrete) or on a
+                                   # regular grid over the box (range; costly for large N)
+    "posterior_num": 101,          # range + posterior: grid points per dimension (dim <= 2 only)
     # range space only: how the acquisition function is maximized over the box
     "optimizer": "random",         # random (uniform samples) | odatse (ODAT-SE algorithm)
     "optimizer_nsamples": 1000,    # random: number of uniform samples
@@ -257,6 +260,8 @@ def _make_optimizer(p: dict, min_X, max_X):
     from physbo.search.optimize import odatse as od
 
     alg = od.default_alg_dict(min_X, max_X, p["odatse_algorithm"])
+    if p["seed"] is not None:
+        alg["seed"] = int(p["seed"])        # otherwise every step starts ODAT-SE from the same point (default seed 12345)
     alg = _deep_update(alg, p["odatse_params"] or {})
     desc = {"optimizer": "odatse", "algorithm": p["odatse_algorithm"],
             "params": {k: v for k, v in alg.items() if k not in ("param", "name")}}
@@ -355,16 +360,35 @@ def run_propose(space, obs_actions, obs_X, t: np.ndarray, params: dict):
         fm = np.asarray(policy.get_post_fmean(proposed_X), dtype=float).reshape(proposed_X.shape[0], -1)
         fv = np.asarray(policy.get_post_fcov(proposed_X, diag=True), dtype=float).reshape(proposed_X.shape[0], -1)
         summary["posterior_at_proposal"] = {"fmean": (sign * fm).tolist(), "fstd": np.sqrt(np.clip(fv, 0, None)).tolist()}
-        if p["posterior"] and kind == DISCRETE:
-            N = space.num_candidates
-            fmean = np.asarray(policy.get_post_fmean(space.X), dtype=float).reshape(N, -1)
-            fvar = np.asarray(policy.get_post_fcov(space.X, diag=True), dtype=float).reshape(N, -1)
-            posterior = {"fmean": sign * fmean, "fstd": np.sqrt(np.clip(fvar, 0.0, None))}
+        if p["posterior"]:
+            posterior = _posterior_arrays(policy, space, kind, score, sign, int(p["posterior_num"]))
+            summary["posterior_points"] = int(posterior["X"].shape[0])
     summary.update({"proposed_actions": proposed_a.tolist() if proposed_a is not None else None,
                     "proposed_X": proposed_X.tolist(),
                     "best_so_far": best_of(t, maximize, actions=obs_actions, X=obs_X),
                     "elapsed_seconds": round(time.time() - t0, 3)})
     return proposed_a, proposed_X, summary, posterior
+
+
+def _posterior_arrays(policy, space, kind, score, sign, num):
+    """posterior mean / std (in the stored sign) and the acquisition on every candidate (discrete) or on a grid (range)."""
+    if kind == DISCRETE:
+        Xg = space.X
+    else:
+        if space.dim > 2:
+            raise ValueError("posterior on a grid is available for a range space of dimension 1 or 2 only")
+        from physbo.search.utility import make_grid
+
+        Xg = make_grid(space.min_X, space.max_X, num)
+    N = Xg.shape[0]
+    fmean = np.asarray(policy.get_post_fmean(Xg), dtype=float).reshape(N, -1)
+    fvar = np.asarray(policy.get_post_fcov(Xg, diag=True), dtype=float).reshape(N, -1)
+    out = {"X": np.asarray(Xg, dtype=float), "fmean": sign * fmean, "fstd": np.sqrt(np.clip(fvar, 0.0, None))}
+    try:
+        out["score"] = np.asarray(policy.get_score(score, xs=Xg, parallel=False), dtype=float).reshape(N)
+    except Exception:  # noqa: BLE001  the figure is a by-product; the proposal stands without it
+        pass
+    return out
 
 
 def _obs_arrays(space, observations):
@@ -389,8 +413,8 @@ def propose(space: orm.ArrayData, parameters: orm.Dict, observations: Observatio
     out = {"proposal": proposal, "summary": orm.Dict(dict=summary)}
     if posterior is not None:
         post = orm.ArrayData()
-        post.set_array("fmean", posterior["fmean"])
-        post.set_array("fstd", posterior["fstd"])
+        for name, arr in posterior.items():
+            post.set_array(name, arr)
         out["posterior"] = post
     return out
 

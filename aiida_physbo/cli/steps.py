@@ -257,12 +257,13 @@ def observe(space_pk, observations_pk=None, actions=None, x=None, values=None, f
 # ---------------------------------------------------------------- propose
 def _propose_parameters(score=None, num_rand_basis=None, num_search_each_probe=None, seed=None, num_objectives=None,
                         minimize=False, random=False, posterior=False, interval=None, maximize=None, optimizer=None,
-                        optimizer_nsamples=None, odatse_algorithm=None, odatse_params=None):
+                        optimizer_nsamples=None, odatse_algorithm=None, odatse_params=None, posterior_num=None):
     """the parameters Dict of propose from CLI options (only what was given; defaults live in PROPOSE_DEFAULTS)."""
     p = {}
     for key, val in (("score", score), ("num_rand_basis", num_rand_basis), ("num_search_each_probe", num_search_each_probe),
                      ("seed", seed), ("num_objectives", num_objectives), ("interval", interval), ("optimizer", optimizer),
-                     ("optimizer_nsamples", optimizer_nsamples), ("odatse_algorithm", odatse_algorithm)):
+                     ("optimizer_nsamples", optimizer_nsamples), ("odatse_algorithm", odatse_algorithm),
+                     ("posterior_num", posterior_num)):
         if val is not None:
             p[key] = val
     if odatse_params is not None:
@@ -292,8 +293,8 @@ def _check_range_opts(space, params):
 
 
 def propose(space_pk, observations_pk=None, score=None, num_rand_basis=None, num_search_each_probe=None, seed=None,
-            num_objectives=None, minimize=False, random=False, posterior=False, interval=None, optimizer=None,
-            optimizer_nsamples=None, odatse_algorithm=None, odatse_params=None, label=None, caller="cli"):
+            num_objectives=None, minimize=False, random=False, posterior=False, posterior_num=None, interval=None,
+            optimizer=None, optimizer_nsamples=None, odatse_algorithm=None, odatse_params=None, label=None, caller="cli"):
     from aiida import orm
 
     from ..calcfunctions import propose as _propose
@@ -303,7 +304,7 @@ def propose(space_pk, observations_pk=None, score=None, num_rand_basis=None, num
     obs = _node(observations_pk, ObservationsData, "ObservationsData") if observations_pk else None
     params = _propose_parameters(score, num_rand_basis, num_search_each_probe, seed, num_objectives, minimize, random,
                                  posterior, interval, optimizer=optimizer, optimizer_nsamples=optimizer_nsamples,
-                                 odatse_algorithm=odatse_algorithm, odatse_params=odatse_params)
+                                 odatse_algorithm=odatse_algorithm, odatse_params=odatse_params, posterior_num=posterior_num)
     _check_range_opts(space, params)
     kw = {"space": space, "parameters": orm.Dict(dict=params)}
     if obs is not None:
