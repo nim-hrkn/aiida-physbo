@@ -99,6 +99,7 @@ python -m pytest -p aiida.tools.pytest_fixtures tests                    # tempo
 | `aiida_physbo/query/nodes.py` | read-only queries (status, history, proposal, results, provenance) |
 | `aiida_physbo/cli/spec.py` | the single table of subcommands (also the MCP allow-list) |
 | `aiida_physbo/mcp/server.py` | `physbo-mcp` |
+| `.claude/skills/aiida-physbo/SKILL.md` | the skill for Claude Code: concepts, promises, typical flow, failure modes, PHYSBO limits |
 | `examples/` | runnable CLI scripts (`interactive_loop.sh`, `submit_optimize.sh`, `one_dimensional.py` with step-by-step figures) and MCP session transcripts for both spaces |
 
 Action log: `~/.aiida-physbo/log/action-<YYYY-MM>.jsonl` (every node-creating or control call, with `caller` cli/mcp).
@@ -112,6 +113,7 @@ is whatever the checked-out source says.
 | version | date | what |
 |---|---|---|
 | 0.1.0 | 2026-10-08 | discrete space only: CandidatesData, ObservationsData (`actions`, `t`), propose / observe / optimize WorkChain, CLI, MCP |
+| 0.3.1 | 2026-10-08 | repository-bundled skill `.claude/skills/aiida-physbo/SKILL.md` (how to use and fix the plugin; no machine-specific information) |
 | 0.3.0 | 2026-10-08 | `--posterior` works on a range space too (grid of `posterior_num` points over a 1-D/2-D box) and stores `X` and the acquisition `score`; new read command `posterior` / tool `physbo_posterior` (the data of a figure); `plot` draws a 1-D propose step (posterior band, acquisition, proposal); the propose `seed` is passed to ODAT-SE; `examples/one_dimensional.py` |
 | 0.2.1 | 2026-10-08 | `examples/`: CLI scripts for the interactive loop and the daemon WorkChain on both spaces, and the MCP session transcripts (range, discrete) |
 | 0.2.0 | 2026-10-08 | range (continuous) space: SearchBoxData, PHYSBO `range` / `range_multi` policies with the random or ODAT-SE acquisition optimizer; ObservationsData gains `X` and the `space` attribute; CLI/MCP options `space_pk`, `search-box`, `space-info`, `--x`, optimizer options; negative option values accepted |
