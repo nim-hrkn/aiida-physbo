@@ -81,6 +81,8 @@ Tools are `physbo_<subcommand>`: read tools always; `physbo_candidates`, `physbo
 `--allow-control`. The server never imports aiida; it runs `physbo-aiida --json` as a subprocess with a
 55 s timeout (see `docs/mcp.md`).
 
+Results of the examples and the benchmark: `docs/results.md`.
+
 ## Tests
 
 ```bash
@@ -114,6 +116,7 @@ is whatever the checked-out source says.
 | version | date | what |
 |---|---|---|
 | 0.1.0 | 2026-10-08 | discrete space only: CandidatesData, ObservationsData (`actions`, `t`), propose / observe / optimize WorkChain, CLI, MCP |
+| 0.4.3 | 2026-10-09 | `docs/results.md`: the results of every example and benchmark run, lessons, PHYSBO issues found |
 | 0.4.2 | 2026-10-09 | bundled skill v1.1.0: test functions, benchmark lessons, the two PHYSBO limits with their fork fix branches |
 | 0.4.1 | 2026-10-08 | objective `transform: log` (`--transform log`): record log f for functions spanning orders of magnitude; `known_minimum` follows the transform. Goldstein–Price check in `examples/README.md` |
 | 0.4.0 | 2026-10-08 | benchmark functions beyond PHYSBO's (`extra_functions.py`: Branin, GoldsteinPrice, SixHumpCamel, Levy, Hartmann3/6, Forrester, GramacyLee, DTLZ2) with known minima; Gaussian observation noise (`--noise`, `--noise-seed`); `results` reports the regret to the known minimum; `examples/benchmark.py` |
