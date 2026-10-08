@@ -94,7 +94,8 @@ python -m pytest -p aiida.tools.pytest_fixtures tests                    # tempo
 |---|---|
 | `aiida_physbo/data.py` | `CandidatesData` (array `X`), `SearchBoxData` (arrays `min_X`, `max_X`), `ObservationsData` (arrays `t` (M, k), `X` (M, d), `actions` (discrete only)) |
 | `aiida_physbo/calcfunctions.py` | `candidates_from_file`, `candidates_from_grid`, `search_box`, `observe`, `propose`, `evaluate_test_function`, `summarize`; `PROPOSE_DEFAULTS` |
-| `aiida_physbo/objectives.py` | PHYSBO test functions as objectives (`{"name", "kwargs", "maximize"}`) |
+| `aiida_physbo/objectives.py` | test functions as objectives (`{"name", "kwargs", "maximize", "noise", "noise_seed"}`); `known_minimum` |
+| `aiida_physbo/extra_functions.py` | benchmark functions PHYSBO does not ship (Branin, Hartmann6, Levy, Forrester, DTLZ2, ...) in PHYSBO's TestFunction form |
 | `aiida_physbo/workflows/optimize.py` | `PhysboOptimizeWorkChain` (entry point `physbo.optimize`) |
 | `aiida_physbo/query/nodes.py` | read-only queries (status, history, proposal, results, provenance) |
 | `aiida_physbo/cli/spec.py` | the single table of subcommands (also the MCP allow-list) |
@@ -113,6 +114,7 @@ is whatever the checked-out source says.
 | version | date | what |
 |---|---|---|
 | 0.1.0 | 2026-10-08 | discrete space only: CandidatesData, ObservationsData (`actions`, `t`), propose / observe / optimize WorkChain, CLI, MCP |
+| 0.4.0 | 2026-10-08 | benchmark functions beyond PHYSBO's (`extra_functions.py`: Branin, GoldsteinPrice, SixHumpCamel, Levy, Hartmann3/6, Forrester, GramacyLee, DTLZ2) with known minima; Gaussian observation noise (`--noise`, `--noise-seed`); `results` reports the regret to the known minimum; `examples/benchmark.py` |
 | 0.3.1 | 2026-10-08 | repository-bundled skill `.claude/skills/aiida-physbo/SKILL.md` (how to use and fix the plugin; no machine-specific information) |
 | 0.3.0 | 2026-10-08 | `--posterior` works on a range space too (grid of `posterior_num` points over a 1-D/2-D box) and stores `X` and the acquisition `score`; new read command `posterior` / tool `physbo_posterior` (the data of a figure); `plot` draws a 1-D propose step (posterior band, acquisition, proposal); the propose `seed` is passed to ODAT-SE; `examples/one_dimensional.py` |
 | 0.2.1 | 2026-10-08 | `examples/`: CLI scripts for the interactive loop and the daemon WorkChain on both spaces, and the MCP session transcripts (range, discrete) |

@@ -71,6 +71,16 @@ problems, so the WorkChain stores `f` and runs `propose` with `maximize=False`.
 - `observe` rejects actions outside `[0, N)`, duplicates (an action is a candidate; measuring it twice
   is a different experiment design), and a change of the number of objectives.
 
+## Objectives (`objectives.py`, `extra_functions.py`)
+
+The WorkChain's objective is a name in the registry: every `SingleTestFunction` / `MultiTestFunction` of
+`physbo.test_functions` plus the plugin's own `extra_functions` (Branin, GoldsteinPrice, SixHumpCamel,
+Levy, Hartmann3, Hartmann6, Forrester, GramacyLee; DTLZ2 with `nobj`). PHYSBO's definition wins if it
+ever ships a function of the same name. The extras carry `global_minimum` / `global_minimum_point()`;
+`objectives.known_minimum` uses them and `results` reports `regret = |best − f*|`. `"noise"` adds
+Gaussian observation noise whose generator is seeded from `noise_seed` and the evaluated coordinates, so
+a rerun reproduces the same values and a new point gets a new draw.
+
 ## PhysboOptimizeWorkChain (`physbo.optimize`)
 
 Inputs: `space` (CandidatesData or SearchBoxData), `objective` Dict, `parameters` Dict (propose parameters; `num_objectives` and

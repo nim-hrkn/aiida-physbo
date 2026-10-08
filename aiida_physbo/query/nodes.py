@@ -345,6 +345,18 @@ def results(pk):
         d["inputs"] = {k: v.pk for k, v in input_nodes(node).items()}
         if "summary" in outs:
             d["summary"] = outs["summary"].get_dict()
+            try:
+                from .. import objectives
+
+                obj = d["summary"].get("objective") or {}
+                km = objectives.known_minimum(obj) if obj else None
+                if km is not None and "best_value" in d["summary"].get("best", {}):
+                    f_star = km[0] if not obj.get("maximize") else -km[0]
+                    best = d["summary"]["best"]["best_value"]
+                    d["known_minimum"] = {"f_star": km[0], "points": km[1],
+                                          "regret": abs(best - f_star), "noise": obj.get("noise") or 0.0}
+            except Exception:  # noqa: BLE001  the comparison is a convenience
+                pass
         if "observations" in outs:
             d["observations_pk"] = outs["observations"].pk
         elif node.is_terminated:

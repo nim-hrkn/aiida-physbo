@@ -235,7 +235,7 @@ def physbo_propose(space_pk: int, observations_pk: int | None = None, score: str
 
 
 def physbo_submit_optimize(test_function: str, kwargs: str | dict | None = None, maximize: bool = False,
-                           space_pk: int | None = None, space: str | None = None, num: int | None = None,
+                           noise: float | None = None, noise_seed: int | None = None, space_pk: int | None = None, space: str | None = None, num: int | None = None,
                            observations_pk: int | None = None, num_random: int | None = None, num_bayes: int | None = None,
                            score: str | None = None, num_rand_basis: int | None = None, num_search_each_probe: int | None = None,
                            seed: int | None = None, optimizer: str | None = None, optimizer_nsamples: int | None = None,
@@ -245,9 +245,12 @@ def physbo_submit_optimize(test_function: str, kwargs: str | dict | None = None,
     physbo_test_functions): num_random random evaluations, then num_bayes Bayesian steps of propose -> evaluate -> observe.
     The space is `space_pk` (CandidatesData or SearchBoxData) or is built from the function's box: space="discrete" (default,
     a grid of `num` points per dimension) or space="range" (the box itself, with optimizer / odatse options as in
-    physbo_propose). The function is minimized unless maximize=true. Returns the WorkChain pk; poll with physbo_wait /
-    physbo_process, read with physbo_results."""
-    return run("submit-optimize", test_function=test_function, kwargs=kwargs, maximize=maximize, space_pk=space_pk, space=space,
+    physbo_propose). The function is minimized unless maximize=true; `noise` adds Gaussian observation noise (std).
+    Functions: PHYSBO's (Sphere, Rastrigin, Ackley, Rosenbrock, ZDT1-6, ...) plus Branin, GoldsteinPrice, SixHumpCamel,
+    Levy, Hartmann3, Hartmann6, Forrester, GramacyLee, DTLZ2 (see physbo_test_functions, which lists the known minimum).
+    Returns the WorkChain pk and the known minimum; poll with physbo_wait / physbo_process, read with physbo_results."""
+    return run("submit-optimize", test_function=test_function, kwargs=kwargs, maximize=maximize, noise=noise,
+               noise_seed=noise_seed, space_pk=space_pk, space=space,
                num=num, observations_pk=observations_pk, num_random=num_random, num_bayes=num_bayes, score=score,
                num_rand_basis=num_rand_basis, num_search_each_probe=num_search_each_probe, seed=seed, optimizer=optimizer,
                optimizer_nsamples=optimizer_nsamples, odatse_algorithm=odatse_algorithm, odatse_params=odatse_params, label=label)

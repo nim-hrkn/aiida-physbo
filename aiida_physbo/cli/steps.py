@@ -325,7 +325,8 @@ def propose(space_pk, observations_pk=None, score=None, num_rand_basis=None, num
 
 
 # ---------------------------------------------------------------- submit-optimize
-def submit_optimize(test_function, kwargs=None, maximize=False, space_pk=None, space=None, num=None, observations_pk=None,
+def submit_optimize(test_function, kwargs=None, maximize=False, noise=None, noise_seed=None, space_pk=None, space=None, num=None,
+                    observations_pk=None,
                     num_random=None, num_bayes=None, score=None, num_rand_basis=None, num_search_each_probe=None,
                     seed=None, optimizer=None, optimizer_nsamples=None, odatse_algorithm=None, odatse_params=None,
                     label=None, caller="cli"):
@@ -340,6 +341,11 @@ def submit_optimize(test_function, kwargs=None, maximize=False, space_pk=None, s
     from .control import daemon_status
 
     objective = {"name": test_function, "kwargs": _json(kwargs, "--kwargs") or {}, "maximize": bool(maximize)}
+    if noise:
+        if noise < 0:
+            raise ValueError("--noise must be >= 0")
+        objective["noise"] = float(noise)
+        objective["noise_seed"] = int(noise_seed or 0)
     fn = objectives.make(objective)                                   # raises on an unknown name / bad kwargs
     name = label or test_function
     if space_pk:
@@ -395,7 +401,8 @@ def submit_optimize(test_function, kwargs=None, maximize=False, space_pk=None, s
     logdir.append_jsonl("action", {"action": "submit-optimize", "pk": node.pk, "objective": objective, "space_pk": sp.pk,
                                    "space": space_of(sp), "num_random": n_random, "num_bayes": n_bayes, "caller": caller})
     out = {"pk": node.pk, "label": node.label, "space_pk": sp.pk, "space": space_of(sp), "objective": objective,
-           "parameters": params, "num_random": n_random, "num_bayes": n_bayes, "daemon": ds}
+           "parameters": params, "num_random": n_random, "num_bayes": n_bayes, "daemon": ds,
+           "known_minimum": objectives.known_minimum(objective) if fn.nobj == 1 else None}
     if not ds.get("running"):
         out["hint"] = "the daemon is not running: the WorkChain stays in Created until `daemon-start`"
     return out

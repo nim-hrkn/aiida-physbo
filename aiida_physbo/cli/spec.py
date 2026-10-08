@@ -121,6 +121,8 @@ SUBCOMMANDS = {
                             options={"test_function": ("str", True, "objective: a PHYSBO test function name (see test-functions)"),
                                      "kwargs": _KWARGS,
                                      "maximize": ("bool", False, "store and maximize -f instead of minimizing f"),
+                                     "noise": ("float", False, "Gaussian observation noise (std) added to every evaluation (default 0)"),
+                                     "noise_seed": ("int", False, "seed of the observation noise (default 0)"),
                                      "space_pk": ("int", False, "pk of the CandidatesData / SearchBoxData (default: built from the function box)"),
                                      "space": ("str", False, "without space_pk: discrete (default, a grid) | range (the box itself)"),
                                      "num": ("int", False, "grid points per dimension for a discrete space built here (default 21)"),

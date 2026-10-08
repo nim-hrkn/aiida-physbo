@@ -49,6 +49,8 @@ physbo-aiida submit-optimize --test-function Sphere --space range --num-random 1
 physbo-aiida results --pk <workchain pk>
 ```
 
+テスト関数は PHYSBO 同梱のもの（Sphere、Rastrigin、Ackley、ZDT、…）に加え、プラグインの `extra_functions.py`（Branin、GoldsteinPrice、SixHumpCamel、Levy、Hartmann3 / 6、Forrester、GramacyLee、DTLZ2）。`test-functions` が既知の最小値を返し、`results` が regret を出す。`--noise σ` で観測ノイズを足せる。`examples/benchmark.py` が一式を回して表と図にする。
+
 獲得関数: 単目的 TS（既定）/ EI / PI、多目的 TS / EHVI / HVPI（値は `--values '[[f1,f2],...]'` の行で渡す）。`num_rand_basis` は 0 で厳密 GP、数百でランダム特徴の BLM（候補が数千以上なら）。
 
 ## 約束（破らない）
@@ -76,6 +78,7 @@ physbo-aiida results --pk <workchain pk>
 - range で `num_search_each_probe > 1` かつ `num_rand_basis > 0` は `Variable.add` の形状エラー → 事前に拒否。
 - ODAT-SE は作業ディレクトリに `odatse_output/` を書く → プラグインは一時ディレクトリで走らせて消す。
 - ODAT-SE の初期点は seed で決まる。propose の `seed` を渡さないと `minsearch` が毎手同じ点を提案し得る（0.3.0 から seed を引き渡す）。
+- ベンチマーク（`examples/README.md` の表）: Levy / Hartmann3 は 40 評価で解けるが、値が 3〜10⁶ に広がる Goldstein–Price は素の GP では解けない（観測を log 変換して記録する）。6 次元では獲得関数の最大化に一様サンプル 5000 点のほうが ODAT-SE exchange 300 歩より効いた。ノイズ付きや周期の細かい関数は乱数点を 5〜10 以上に増やす。
 - 観測が 3〜6 点のとき、ハイパーパラメータ学習（ML-II）が極端に短い相関長に落ちることがある: 事後平均が平ら、帯が一様、EI が定数（端を提案）。5〜7 点で回復する。プラグインの問題ではない。`examples/figures/` の図に出ている。
 
 ## リポジトリの構成
