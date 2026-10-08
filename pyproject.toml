@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aiida-physbo"
+version = "0.1.0"
+description = "AiiDA plugin, CLI and MCP server for Bayesian optimization with PHYSBO"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Hiori Kino" }]
+requires-python = ">=3.9"
+dependencies = [
+    "aiida-core>=2.6",
+    "physbo>=3.2",
+    "numpy",
+]
+
+[project.entry-points."aiida.data"]
+"physbo.candidates" = "aiida_physbo.data:CandidatesData"
+"physbo.observations" = "aiida_physbo.data:ObservationsData"
+
+[project.entry-points."aiida.calculations"]
+"physbo.candidates_from_file" = "aiida_physbo.calcfunctions:candidates_from_file"
+"physbo.candidates_from_grid" = "aiida_physbo.calcfunctions:candidates_from_grid"
+"physbo.observe" = "aiida_physbo.calcfunctions:observe"
+"physbo.propose" = "aiida_physbo.calcfunctions:propose"
+"physbo.evaluate_test_function" = "aiida_physbo.calcfunctions:evaluate_test_function"
+"physbo.summarize" = "aiida_physbo.calcfunctions:summarize"
+
+[project.entry-points."aiida.workflows"]
+"physbo.optimize" = "aiida_physbo.workflows.optimize:PhysboOptimizeWorkChain"
+
+[project.optional-dependencies]
+mcp = ["mcp>=2.0,<3.0"]
+plot = ["matplotlib"]
+test = ["pytest"]
+
+[project.scripts]
+physbo-aiida = "aiida_physbo.cli.main:main"
+physbo-mcp = "aiida_physbo.mcp.server:main"
+
+[tool.setuptools.packages.find]
+include = ["aiida_physbo*"]
