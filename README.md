@@ -97,6 +97,7 @@ python -m pytest -p aiida.tools.pytest_fixtures tests                    # tempo
 | `aiida_physbo/query/nodes.py` | read-only queries (status, history, proposal, results, provenance) |
 | `aiida_physbo/cli/spec.py` | the single table of subcommands (also the MCP allow-list) |
 | `aiida_physbo/mcp/server.py` | `physbo-mcp` |
+| `examples/` | runnable CLI scripts (`interactive_loop.sh`, `submit_optimize.sh`) and MCP session transcripts for both spaces |
 
 Action log: `~/.aiida-physbo/log/action-<YYYY-MM>.jsonl` (every node-creating or control call, with `caller` cli/mcp).
 
@@ -109,6 +110,7 @@ is whatever the checked-out source says.
 | version | date | what |
 |---|---|---|
 | 0.1.0 | 2026-10-08 | discrete space only: CandidatesData, ObservationsData (`actions`, `t`), propose / observe / optimize WorkChain, CLI, MCP |
+| 0.2.1 | 2026-10-08 | `examples/`: CLI scripts for the interactive loop and the daemon WorkChain on both spaces, and the MCP session transcripts (range, discrete) |
 | 0.2.0 | 2026-10-08 | range (continuous) space: SearchBoxData, PHYSBO `range` / `range_multi` policies with the random or ODAT-SE acquisition optimizer; ObservationsData gains `X` and the `space` attribute; CLI/MCP options `space_pk`, `search-box`, `space-info`, `--x`, optimizer options; negative option values accepted |
 
 Known PHYSBO 3.2.1 limits surfaced here: the ODAT-SE `mapper` optimizer is excluded (ODAT-SE 4 writes a

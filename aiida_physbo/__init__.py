@@ -11,4 +11,4 @@ Layers (the same shape as aiida-akaikkr):
 - cli/               `physbo-aiida [--json] <sub>`; the table of subcommands is cli/spec.py
 - mcp/               `physbo-mcp`: MCP tools that only run the CLI with --json (no aiida import)
 """
-__version__ = "0.2.0"
+__version__ = "0.2.1"
