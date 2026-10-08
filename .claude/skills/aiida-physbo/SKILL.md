@@ -78,7 +78,7 @@ physbo-aiida results --pk <workchain pk>
 - range で `num_search_each_probe > 1` かつ `num_rand_basis > 0` は `Variable.add` の形状エラー → 事前に拒否。
 - ODAT-SE は作業ディレクトリに `odatse_output/` を書く → プラグインは一時ディレクトリで走らせて消す。
 - ODAT-SE の初期点は seed で決まる。propose の `seed` を渡さないと `minsearch` が毎手同じ点を提案し得る（0.3.0 から seed を引き渡す）。
-- ベンチマーク（`examples/README.md` の表）: Levy / Hartmann3 は 40 評価で解けるが、値が 3〜10⁶ に広がる Goldstein–Price は素の GP では解けない（観測を log 変換して記録する）。6 次元では獲得関数の最大化に一様サンプル 5000 点のほうが ODAT-SE exchange 300 歩より効いた。ノイズ付きや周期の細かい関数は乱数点を 5〜10 以上に増やす。
+- ベンチマーク（`examples/README.md` の表）: Levy / Hartmann3 は 40 評価で解けるが、値が 3〜10⁶ に広がる Goldstein–Price は素の GP では解けない。`--transform log`（objective の `transform: "log"`）で log f を記録すると discrete では regret 57 → 4.7（range は 1 seed では結論が出ない）。6 次元では獲得関数の最大化に一様サンプル 5000 点のほうが ODAT-SE exchange 300 歩より効いた。ノイズ付きや周期の細かい関数は乱数点を 5〜10 以上に増やす。
 - 観測が 3〜6 点のとき、ハイパーパラメータ学習（ML-II）が極端に短い相関長に落ちることがある: 事後平均が平ら、帯が一様、EI が定数（端を提案）。5〜7 点で回復する。プラグインの問題ではない。`examples/figures/` の図に出ている。
 
 ## リポジトリの構成

@@ -64,3 +64,17 @@ def test_noise_is_reproducible_and_fresh_per_point():
     with pytest.raises(ValueError, match="noise"):
         objectives.evaluate({"name": "Forrester", "noise": -1}, X)
     assert objectives.known_minimum({"name": "DTLZ2"}) is None            # multi: no single minimum
+
+
+def test_log_transform():
+    from aiida_physbo import objectives
+
+    X = np.array([[0.0, -1.0], [1.0, 1.0]])
+    raw = objectives.evaluate({"name": "GoldsteinPrice"}, X)
+    lg = objectives.evaluate({"name": "GoldsteinPrice", "transform": "log"}, X)
+    assert np.allclose(lg, np.log(raw)) and raw[0, 0] == pytest.approx(3.0)
+    assert objectives.known_minimum({"name": "GoldsteinPrice", "transform": "log"})[0] == pytest.approx(np.log(3.0))
+    with pytest.raises(ValueError, match="positive"):
+        objectives.evaluate({"name": "Forrester", "transform": "log"}, np.array([[0.75]]))
+    with pytest.raises(ValueError, match="unknown transform"):
+        objectives.evaluate({"name": "Sphere", "transform": "sqrt"}, X)

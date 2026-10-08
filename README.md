@@ -114,6 +114,7 @@ is whatever the checked-out source says.
 | version | date | what |
 |---|---|---|
 | 0.1.0 | 2026-10-08 | discrete space only: CandidatesData, ObservationsData (`actions`, `t`), propose / observe / optimize WorkChain, CLI, MCP |
+| 0.4.1 | 2026-10-08 | objective `transform: log` (`--transform log`): record log f for functions spanning orders of magnitude; `known_minimum` follows the transform. Goldstein–Price check in `examples/README.md` |
 | 0.4.0 | 2026-10-08 | benchmark functions beyond PHYSBO's (`extra_functions.py`: Branin, GoldsteinPrice, SixHumpCamel, Levy, Hartmann3/6, Forrester, GramacyLee, DTLZ2) with known minima; Gaussian observation noise (`--noise`, `--noise-seed`); `results` reports the regret to the known minimum; `examples/benchmark.py` |
 | 0.3.1 | 2026-10-08 | repository-bundled skill `.claude/skills/aiida-physbo/SKILL.md` (how to use and fix the plugin; no machine-specific information) |
 | 0.3.0 | 2026-10-08 | `--posterior` works on a range space too (grid of `posterior_num` points over a 1-D/2-D box) and stores `X` and the acquisition `score`; new read command `posterior` / tool `physbo_posterior` (the data of a figure); `plot` draws a 1-D propose step (posterior band, acquisition, proposal); the propose `seed` is passed to ODAT-SE; `examples/one_dimensional.py` |

@@ -71,6 +71,22 @@ random + Bayesian evaluations. Figure: `figures/benchmark_quick.png`, raw table 
 | GramacyLee | discrete 201 | 18 | −0.342 | −0.869 | 0.528 | high-frequency sin / (2x): 18 points cannot resolve the period; needs ≥ 30 |
 | DTLZ2 (2 obj, 3-D) | range, HVPI | 30 | Pareto 16 | sphere | – | 16 non-dominated points after 30 evaluations |
 
+### Goldstein–Price with `--transform log` (same seed 11, 10 random + 25 EI)
+
+The benchmark row above used the raw f. Recording log f instead (`submit-optimize --transform log`,
+aiida-physbo 0.4.1; the regret below is converted back to raw f):
+
+| case | best (raw f) | f* | regret |
+|---|---|---|---|
+| discrete 41×41, raw | 60.0 | 3 | 57.0 |
+| discrete 41×41, **log** | 7.67 at (0.0, −0.9) | 3 | 4.67 |
+| range, raw | 20.2 | 3 | 17.2 |
+| range, **log** | 31.1 | 3 | 28.1 |
+
+On the grid the log transform makes the difference between "stuck on the 10⁵ plateau" and "next to the
+minimum (0, −1)". On the range space one seed is not enough to tell (both runs end in the right valley
+but far from the bottom); more seeds or more evaluations are needed before drawing a conclusion there.
+
 Lessons that carry over to real problems
 - Scale matters more than multimodality: Levy and Hartmann3 (bounded, O(1) values) are solved in 40
   evaluations, Goldstein–Price (6 orders of magnitude) is not. Transform wide-range objectives before

@@ -3,7 +3,7 @@
 """PHYSBO test functions as objectives of the closed-loop WorkChain.
 
 An objective spec is a plain dict: {"name": "Sphere", "kwargs": {"dim": 2}, "maximize": false,
-"noise": 0.0, "noise_seed": null}. Names come from physbo.test_functions and from extra_functions.py
+"noise": 0.0, "noise_seed": null, "transform": null}. Names come from physbo.test_functions and from extra_functions.py
 (Branin, Hartmann6, Levy, Forrester, DTLZ2, ...). PHYSBO defines every test function as a minimization
 problem; here it is evaluated with `test_maximizer=False`, so the stored values are the function values
 themselves, and `propose` is told `maximize=False`. Set "maximize": true to store -f instead (then propose
@@ -86,7 +86,23 @@ def evaluate(spec: dict, X: np.ndarray) -> np.ndarray:
         mix = int(abs(hash(np.round(X, 12).tobytes())) % (2**32))
         rng = np.random.default_rng([int(spec.get("noise_seed") or 0), mix])
         t = t + noise * rng.standard_normal(t.shape)
+    t = apply_transform(spec, t)
     return -t if spec.get("maximize", False) else t
+
+
+TRANSFORMS = (None, "log")
+
+
+def apply_transform(spec: dict, t: np.ndarray) -> np.ndarray:
+    """the value transform of an objective spec: None (identity) or "log" (natural log, values must be > 0)."""
+    tr = spec.get("transform")
+    if tr in (None, "", "none"):
+        return t
+    if tr == "log":
+        if np.any(t <= 0):
+            raise ValueError("transform 'log' needs positive function values")
+        return np.log(t)
+    raise ValueError(f"unknown transform {tr!r}; choose from {TRANSFORMS}")
 
 
 def known_minimum(spec: dict):
@@ -99,7 +115,8 @@ def known_minimum(spec: dict):
     f_star = getattr(type(fn), "global_minimum", None)
     if f_star is None:
         f_star = float(np.min(fn(pts)))
-    return float(f_star), pts.tolist()
+    f_star = float(apply_transform(spec, np.asarray([[f_star]]))[0, 0])
+    return f_star, pts.tolist()
 
 
 def grid_spec(spec: dict, num) -> dict:

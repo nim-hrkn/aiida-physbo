@@ -325,7 +325,7 @@ def propose(space_pk, observations_pk=None, score=None, num_rand_basis=None, num
 
 
 # ---------------------------------------------------------------- submit-optimize
-def submit_optimize(test_function, kwargs=None, maximize=False, noise=None, noise_seed=None, space_pk=None, space=None, num=None,
+def submit_optimize(test_function, kwargs=None, maximize=False, noise=None, noise_seed=None, transform=None, space_pk=None, space=None, num=None,
                     observations_pk=None,
                     num_random=None, num_bayes=None, score=None, num_rand_basis=None, num_search_each_probe=None,
                     seed=None, optimizer=None, optimizer_nsamples=None, odatse_algorithm=None, odatse_params=None,
@@ -346,6 +346,10 @@ def submit_optimize(test_function, kwargs=None, maximize=False, noise=None, nois
             raise ValueError("--noise must be >= 0")
         objective["noise"] = float(noise)
         objective["noise_seed"] = int(noise_seed or 0)
+    if transform:
+        if transform not in ("log",):
+            raise ValueError("--transform must be log")
+        objective["transform"] = transform
     fn = objectives.make(objective)                                   # raises on an unknown name / bad kwargs
     name = label or test_function
     if space_pk:
